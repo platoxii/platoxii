@@ -1,0 +1,9 @@
+{
+  "name": "工地缺失改善追蹤系統",
+  "short_name": "工地缺失",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0b1120",
+  "theme_color": "#0f172a",
+  "lang": "zh-TW"
+}

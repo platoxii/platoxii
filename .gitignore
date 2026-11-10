@@ -1,0 +1,10 @@
+.wrangler/
+node_modules/
+.env
+.env.*
+*.pem
+*.key
+CLOUDFLARE_API_TOKEN*
+cloudflare-token*
+.DS_Store
+Thumbs.db

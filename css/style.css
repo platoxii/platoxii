@@ -1,0 +1,78 @@
+    :root {
+      --bg-base: #0b1120;
+      --bg-surface: #0f172a;
+    }
+    body {
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      background-color: var(--bg-base);
+      color: #f8fafc;
+      transition: background-color 0.2s ease, color 0.2s ease;
+      overscroll-behavior-y: contain;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* High-Contrast Outdoor Light Mode */
+    body.theme-light {
+      background-color: #e2e8f0 !important;
+      color: #0f172a !important;
+    }
+    body.theme-light header {
+      background-color: #ffffff !important;
+      border-color: #cbd5e1 !important;
+    }
+    body.theme-light .bg-slate-900 {
+      background-color: #ffffff !important;
+      border-color: #cbd5e1 !important;
+      color: #0f172a !important;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    }
+    body.theme-light .bg-slate-950 {
+      background-color: #f8fafc !important;
+      border-color: #cbd5e1 !important;
+      color: #0f172a !important;
+    }
+    body.theme-light .bg-slate-800 {
+      background-color: #e2e8f0 !important;
+      border-color: #cbd5e1 !important;
+      color: #1e293b !important;
+    }
+    body.theme-light .text-white {
+      color: #0f172a !important;
+    }
+    body.theme-light .text-slate-200,
+    body.theme-light .text-slate-300 {
+      color: #334155 !important;
+    }
+    body.theme-light .text-slate-400 {
+      color: #475569 !important;
+    }
+    body.theme-light .border-slate-800,
+    body.theme-light .border-slate-700 {
+      border-color: #cbd5e1 !important;
+    }
+    body.theme-light select,
+    body.theme-light input[type="text"],
+    body.theme-light input[type="date"],
+    body.theme-light input[type="search"],
+    body.theme-light textarea {
+      background-color: #ffffff !important;
+      color: #0f172a !important;
+      border-color: #94a3b8 !important;
+    }
+    .page-card {
+      animation: cardFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes cardFadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media print {
+      body {
+        background: #ffffff !important;
+        color: #000000 !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }

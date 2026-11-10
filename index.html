@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>工地缺失改善追蹤系統 (一頁一卡極簡版)</title>
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="description" content="工地缺失改善管理系統 — 現場拍照紅圈標記、LINE 通知派工、廠商回傳與三方電子簽章結案" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body class="min-h-screen flex flex-col selection:bg-amber-500 selection:text-slate-950">
+
+  <!-- Top Bar with Brand, Dynamic Project/Inspector Subtitle & 4 Single-Card Mode Tabs -->
+  <header class="bg-slate-900 border-b-2 border-amber-500/80 no-print">
+    <div class="max-w-lg mx-auto px-3 pt-2 pb-1.5 space-y-1.5">
+      <!-- Row 1: Brand + Current Project & Inspector + Embed/Theme Buttons -->
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <div id="header-role-badge" class="px-2 py-1 rounded-lg bg-emerald-700 text-white font-extrabold text-xs shrink-0 shadow">
+            廠商
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5">
+              <h1 class="font-bold text-xs sm:text-sm text-white truncate">工地缺失改善管理系統</h1>
+              <span id="cloud-sync-badge" onclick="refreshFromCloud(false)" title="點擊重新同步雲端資料表" class="px-1.5 py-0.2 text-[10px] font-bold rounded bg-slate-800 text-slate-300 border border-slate-700 shrink-0 cursor-pointer">雲端載入中</span>
+            </div>
+            <p class="text-[11px] text-slate-400 truncate">
+              專案：<span id="header-project-display" class="text-amber-300 font-semibold">A棟新建工程 (宏昇營造)</span> ｜ 查驗：<span id="header-inspector-display" class="text-emerald-300 font-semibold">陳工程師</span>
+            </p>
+            <p class="text-[11px] text-slate-400 truncate">
+              目前：<span id="header-case-id" class="text-amber-300 font-semibold">尚未開單（送出後才編號）</span>
+              ｜ 動作：<span id="header-case-action" class="text-sky-300 font-semibold">開新單</span>
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1 shrink-0">
+          <button type="button" id="owner-auth-btn" onclick="toggleOwnerAuth()" class="px-2 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-bold shadow">
+            工務登入
+          </button>
+          <button type="button" id="embed-html-btn" onclick="copyFullHtmlForGoogleSites()" title="複製 Google Sites 內嵌程式碼" class="hidden px-2 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 text-[11px] font-bold transition">
+            📋 嵌入碼
+          </button>
+          <button type="button" id="theme-toggle-btn" onclick="toggleAppTheme()" title="切換深淺色" class="px-2 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition">
+            <span id="theme-toggle-icon">☀️</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Row 2: 4 Single-Card Navigation Tabs -->
+      <nav class="grid grid-cols-4 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-center" aria-label="主要功能切換">
+        <button type="button" id="tab-btn-overview" onclick="switchMainTab('overview')" class="py-1.5 px-1 rounded-lg text-xs font-bold transition-all bg-amber-500 text-slate-950 shadow truncate">
+          🏠 總覽設定
+        </button>
+        <button type="button" id="tab-btn-pwa" onclick="switchMainTab('pwa')" class="py-1.5 px-1 rounded-lg text-xs font-medium transition-all text-slate-300 hover:text-white truncate">
+          📷 1.拍照提報
+        </button>
+        <button type="button" id="tab-btn-vendor" onclick="switchMainTab('vendor')" class="py-1.5 px-1 rounded-lg text-xs font-medium transition-all text-slate-300 hover:text-white truncate">
+          👷 2.廠商回傳
+        </button>
+        <button type="button" id="tab-btn-admin" onclick="switchMainTab('admin')" class="py-1.5 px-1 rounded-lg text-xs font-medium transition-all text-slate-300 hover:text-white truncate">
+          <span>✅ 3.查驗結案</span>
+          <span id="admin-pending-badge" class="ml-0.5 px-1.5 py-0.2 text-[10px] rounded-full bg-rose-500 text-white font-bold">0</span>
+        </button>
+      </nav>
+      <div id="line-inapp-banner" class="hidden mt-1.5 px-2.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/40 text-[11px] text-amber-100 leading-snug">
+        你現在是在 <strong>LINE 裡面</strong>開網頁，LINE 不給網頁直接開相機，所以會跳相簿。
+        <button type="button" onclick="openInExternalBrowser()" class="mt-1.5 w-full py-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold">用瀏覽器開啟（才能直接拍照）</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Strictly ONE Unified Card On Screen At Any Time -->
+  <main class="flex-1 max-w-lg w-full mx-auto px-2.5 py-2.5 flex flex-col no-print">
+
+    <!-- ==========================================
+         VIEW 0: 專案總覽・更新專案・查驗人員・SOP 與統計單卡 (Reference Image Match)
+         ========================================== -->
+    <section id="view-overview" class="flex-1 flex flex-col">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-4 space-y-4 flex-1 flex flex-col justify-between page-card">
+        <div class="space-y-3.5">
+
+          <!-- 1. 系統標準作業流程 (SOP) 3-Step Interactive Cards -->
+          <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3 space-y-2">
+            <div class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+              <span>ℹ️ 系統標準作業流程 (SOP) — 點擊步驟可直接前往</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-left">
+              <button type="button" onclick="switchMainTab('pwa'); goToPwaCard(1);" class="bg-slate-900 hover:border-amber-500/60 border border-slate-800 rounded-xl p-2.5 transition text-left space-y-1">
+                <div class="text-[11px] font-bold text-amber-400">1. 現況拍照與登錄</div>
+                <p class="text-[10px] text-slate-400 leading-snug">工程師現場紀錄並開立缺失通知單。</p>
+              </button>
+              <button type="button" onclick="switchMainTab('vendor'); goToVendorCard(1);" class="bg-slate-900 hover:border-emerald-500/60 border border-slate-800 rounded-xl p-2.5 transition text-left space-y-1">
+                <div class="text-[11px] font-bold text-emerald-400">2. 廠商修復與回傳</div>
+                <p class="text-[10px] text-slate-400 leading-snug">施工廠商修正缺失後，拍照上傳回系統。</p>
+              </button>
+              <button type="button" onclick="switchMainTab('admin');" class="bg-slate-900 hover:border-sky-500/60 border border-slate-800 rounded-xl p-2.5 transition text-left space-y-1">
+                <div class="text-[11px] font-bold text-sky-400">3. 工程師查驗與結案</div>
+                <p class="text-[10px] text-slate-400 leading-snug">現場核對無誤後，三方簽章勾選結案。</p>
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. 目前巡檢工區 + 更新專案 + 查驗人員 -->
+          <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="px-2.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold">
+                目前巡檢工區與查驗人員設定
+              </span>
+              <span id="project-saved-badge" class="text-[11px] text-emerald-400 font-semibold">✓ 已同步套用</span>
+            </div>
+
+            <!-- Project Name Row -->
+            <div class="space-y-1">
+              <label for="project-name-input" class="block text-xs text-slate-400">目前巡檢專案 / 工區名稱：</label>
+              <div class="flex items-center gap-2">
+                <input id="project-name-input" type="text" value="A棟新建工程 (宏昇營造)" placeholder="請輸入專案或工區名稱..." class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm font-bold text-white focus:border-amber-500 focus:outline-none" />
+                <button type="button" onclick="updateProjectAndInspector()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-amber-500 text-white hover:text-slate-950 font-bold text-xs border border-slate-700 transition shrink-0 shadow">
+                  更新專案
+                </button>
+              </div>
+            </div>
+
+            <!-- Inspector Name Row -->
+            <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
+              <label for="inspector-name-input" class="text-xs text-slate-300 font-semibold shrink-0">👷 查驗人員：</label>
+              <input id="inspector-name-input" type="text" value="陳工程師" placeholder="請輸入查驗工程師姓名..." onchange="updateProjectAndInspector()" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-emerald-300 focus:border-emerald-500 focus:outline-none" />
+              <button type="button" onclick="updateProjectAndInspector()" class="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 text-xs font-bold transition shrink-0">
+                儲存人員
+              </button>
+            </div>
+            <div class="pt-2 border-t border-slate-800/80 space-y-1">
+              <label for="owner-pin-input" class="block text-[11px] text-slate-400">工務密碼（只給甲方。沒登入的人只能用廠商回傳）</label>
+              <div class="flex items-center gap-2">
+                <input id="owner-pin-input" type="password" value="2468" autocomplete="off" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" />
+                <button type="button" onclick="saveOwnerPin()" class="px-2.5 py-1.5 rounded-xl bg-amber-500 text-slate-950 text-xs font-bold">更新密碼</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-3">
+            <div class="space-y-0.5">
+              <span class="px-2.5 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30 text-[11px] font-bold">本工地常用選項（管理員可改）</span>
+              <p class="text-[11px] text-slate-400 pt-1">現場拍照時仍可直接打字。這裡只編輯下拉建議，不要寫死 A棟／1F／10F。</p>
+            </div>
+            <div class="grid grid-cols-1 gap-2.5">
+              <div>
+                <div class="text-[11px] text-slate-300 font-semibold mb-1">棟別</div>
+                <div id="vocab-chips-buildings" class="flex flex-wrap gap-1 mb-1.5"></div>
+                <div class="flex gap-1">
+                  <input id="vocab-input-buildings" type="text" placeholder="例如：A棟、北棟、工務所" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter'){event.preventDefault();addVocabFromInput('buildings');}" />
+                  <button type="button" onclick="addVocabFromInput('buildings')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-[11px] font-bold border border-slate-700">新增</button>
+                </div>
+              </div>
+              <div>
+                <div class="text-[11px] text-slate-300 font-semibold mb-1">樓層 / 戶別</div>
+                <div id="vocab-chips-floors" class="flex flex-wrap gap-1 mb-1.5"></div>
+                <div class="flex gap-1">
+                  <input id="vocab-input-floors" type="text" placeholder="例如：B1、3F、3F-A1" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter'){event.preventDefault();addVocabFromInput('floors');}" />
+                  <button type="button" onclick="addVocabFromInput('floors')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-[11px] font-bold border border-slate-700">新增</button>
+                </div>
+              </div>
+              <div>
+                <div class="text-[11px] text-slate-300 font-semibold mb-1">區域位置</div>
+                <div id="vocab-chips-areas" class="flex flex-wrap gap-1 mb-1.5"></div>
+                <div class="flex gap-1">
+                  <input id="vocab-input-areas" type="text" placeholder="例如：大廳、戶外鷹架、電氣室" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter'){event.preventDefault();addVocabFromInput('areas');}" />
+                  <button type="button" onclick="addVocabFromInput('areas')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-[11px] font-bold border border-slate-700">新增</button>
+                </div>
+              </div>
+              <div>
+                <div class="text-[11px] text-slate-300 font-semibold mb-1">工種</div>
+                <div id="vocab-chips-trades" class="flex flex-wrap gap-1 mb-1.5"></div>
+                <div class="flex gap-1">
+                  <input id="vocab-input-trades" type="text" placeholder="例如：帷幕牆、景觀工程" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter'){event.preventDefault();addVocabFromInput('trades');}" />
+                  <button type="button" onclick="addVocabFromInput('trades')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-[11px] font-bold border border-slate-700">新增</button>
+                </div>
+              </div>
+            </div>
+            <button type="button" onclick="harvestVocabFromDefects()" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold border border-slate-700">
+              從既有缺失單帶入曾用過的位置／工種
+            </button>
+          </div>
+
+          <!-- 目前案件工作檯 -->
+          <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-2.5">
+            <div class="flex items-center justify-between gap-2">
+              <span class="px-2.5 py-0.5 rounded-md bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[11px] font-bold">目前案件</span>
+              <button type="button" onclick="startNewEngineerCase(); switchMainTab('pwa'); goToPwaCard(1);" class="px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-bold">
+                ＋ 開新缺失單
+              </button>
+            </div>
+            <select id="overview-case-select" onchange="selectEngineerCase(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none">
+              <option value="">＋ 開新缺失單（尚未編號）</option>
+            </select>
+            <div id="overview-case-summary" class="text-[11px] text-slate-400 leading-snug">尚未選擇案件。這次是開新單，送出後才會拿到編號。</div>
+            <div id="overview-case-list" class="space-y-1 max-h-40 overflow-y-auto"></div>
+            <button type="button" onclick="openCurrentCaseInPwa()" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700">
+              繼續處理目前案件（1.拍照提報）
+            </button>
+          </div>
+
+          <!-- 3. Big Orange CTA Button: 現場拍照記錄缺失（三步出表） -->
+          <div class="text-center space-y-1.5">
+            <button type="button" onclick="startNewEngineerCase(); switchMainTab('pwa'); goToPwaCard(1);" class="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-orange-600 via-amber-500 to-orange-500 hover:from-orange-500 hover:to-amber-400 text-slate-950 font-extrabold text-base shadow-xl shadow-orange-500/25 flex items-center justify-center gap-2 transition transform active:scale-[0.99]">
+              <span>📷 ＋ 開新單：現場拍照記錄缺失</span>
+            </button>
+            <p class="text-[11px] text-slate-400">
+              步驟 1：拍照紅圈標記 ➔ 步驟 2：點選樓層與缺失 ➔ 步驟 3：一鍵產出 LINE 專用通知與 PDF
+            </p>
+          </div>
+
+        </div>
+
+        <!-- 4. Bottom 4 KPI Status Boxes (Clickable to filter & jump to 3.查驗結案) -->
+        <div class="grid grid-cols-4 gap-2 pt-2 border-t border-slate-800">
+          <button type="button" onclick="openAdminWithStatusFilter('ALL')" class="bg-slate-950 hover:border-slate-600 border border-slate-800 rounded-xl p-2.5 text-left transition">
+            <div class="text-[10px] text-slate-400 font-semibold truncate">全部缺失總數</div>
+            <div id="ov-kpi-total" class="text-xl font-extrabold text-white mt-0.5">0</div>
+          </button>
+          <button type="button" onclick="openAdminWithStatusFilter('OPEN')" class="bg-rose-950/30 hover:border-rose-500 border border-rose-500/40 rounded-xl p-2.5 text-left transition">
+            <div class="text-[10px] text-rose-300 font-semibold truncate">待改善 (OPEN)</div>
+            <div id="ov-kpi-open" class="text-xl font-extrabold text-rose-400 mt-0.5">0</div>
+          </button>
+          <button type="button" onclick="openAdminWithStatusFilter('PENDING_REVIEW')" class="bg-amber-950/30 hover:border-amber-500 border border-amber-500/40 rounded-xl p-2.5 text-left transition">
+            <div class="text-[10px] text-amber-300 font-semibold truncate">待查驗 (PENDING)</div>
+            <div id="ov-kpi-pending" class="text-xl font-extrabold text-amber-400 mt-0.5">0</div>
+          </button>
+          <button type="button" onclick="openAdminWithStatusFilter('CLOSED')" class="bg-emerald-950/30 hover:border-emerald-500 border border-emerald-500/40 rounded-xl p-2.5 text-left transition">
+            <div class="text-[10px] text-emerald-300 font-semibold truncate">已結案 (CLOSED)</div>
+            <div id="ov-kpi-closed" class="text-xl font-extrabold text-emerald-400 mt-0.5">0</div>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VIEW 1: 拍照派單（整個畫面僅顯示一張整合式單卡）
+         ========================================== -->
+    <section id="view-pwa" class="hidden flex-1 flex flex-col">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col flex-1">
+
+        <!-- Integrated Step Header Inside the Single Card -->
+        <div class="bg-slate-950 px-3 py-2 border-b border-slate-800 space-y-1.5">
+          <div class="flex items-center gap-1.5">
+            <select id="pwa-case-select" onchange="selectEngineerCase(this.value)" aria-label="目前案件" class="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-[11px] text-white focus:border-amber-500 focus:outline-none">
+              <option value="">＋ 開新缺失單（尚未編號）</option>
+            </select>
+            <button type="button" onclick="startNewEngineerCase()" class="shrink-0 px-2 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-[11px] font-bold">
+              ＋新單
+            </button>
+          </div>
+          <div class="grid grid-cols-4 gap-1 text-[11px]">
+            <button type="button" id="pwa-step-pill-1" onclick="goToPwaCard(1)" class="py-1.5 px-1 rounded-lg font-bold bg-amber-500 text-slate-950 text-center truncate transition shadow">
+              ① 拍照圈選
+            </button>
+            <button type="button" id="pwa-step-pill-2" onclick="goToPwaCard(2)" class="py-1.5 px-1 rounded-lg font-medium text-slate-400 hover:text-white text-center truncate transition">
+              ② 位置說明
+            </button>
+            <button type="button" id="pwa-step-pill-3" onclick="goToPwaCard(3)" class="py-1.5 px-1 rounded-lg font-medium text-slate-400 hover:text-white text-center truncate transition">
+              ③ 工種派單
+            </button>
+            <button type="button" id="pwa-step-pill-4" onclick="goToPwaCard(4)" class="py-1.5 px-1 rounded-lg font-medium text-slate-400 hover:text-white text-center truncate transition">
+              ④ 通知卡片
+            </button>
+          </div>
+        </div>
+
+        <!-- CARD BODY 1 / 4: 現場拍照與圈選標記 -->
+        <div id="pwa-step-1" class="page-card p-3.5 space-y-3 flex-1 flex flex-col justify-between">
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold text-xs border border-amber-500/30">1 / 4</span>
+                <h2 class="text-sm font-bold text-white">📸 現場拍照與紅圈標記</h2>
+              </div>
+              <div class="flex items-center gap-1 shrink-0">
+                <button type="button" onclick="openPhotoPicker('pwa','camera')" class="px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-bold shadow">
+                  📷 拍照
+                </button>
+                <button type="button" onclick="openPhotoPicker('pwa','gallery')" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-[11px] font-bold border border-slate-600">
+                  🖼 上傳圖片
+                </button>
+                <input type="file" id="pwa-photo-camera" accept="image/*" capture="environment" class="hidden" onchange="handlePwaPhotoUpload(event)" />
+                <input type="file" id="pwa-photo-gallery" accept="image/*" class="hidden" onchange="handlePwaPhotoUpload(event)" />
+              </div>
+            </div>
+            <div id="pwa-retake-banner" class="hidden px-2.5 py-1.5 rounded-lg bg-rose-500/15 border border-rose-500/40 text-[11px] text-rose-200 font-semibold">
+              單號不變：重拍後按派單，會覆蓋雲端 PIC 與派工單（before）
+            </div>
+
+            <!-- Compact Drawing Tools -->
+            <div class="flex items-center justify-between gap-1 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+              <div class="flex items-center gap-1">
+                <button type="button" id="tool-circle" onclick="setDrawTool('circle')" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-rose-600 text-white shadow">
+                  ⭕ 紅圈
+                </button>
+                <button type="button" id="tool-arrow" onclick="setDrawTool('arrow')" class="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800">
+                  ↗️ 箭頭
+                </button>
+                <button type="button" id="tool-pen" onclick="setDrawTool('pen')" class="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800">
+                  ✏️ 畫筆
+                </button>
+              </div>
+              <div class="flex items-center gap-1.5 px-1.5 py-0.5 bg-slate-900 rounded-lg border border-slate-800">
+                <button type="button" id="color-btn-red" onclick="setDrawColor('#ff1e42')" class="w-4 h-4 rounded-full bg-[#ff1e42] ring-2 ring-white scale-110 transition" title="紅"></button>
+                <button type="button" id="color-btn-amber" onclick="setDrawColor('#facc15')" class="w-4 h-4 rounded-full bg-[#facc15] opacity-60 hover:opacity-100 transition" title="黃"></button>
+                <button type="button" id="color-btn-sky" onclick="setDrawColor('#38bdf8')" class="w-4 h-4 rounded-full bg-[#38bdf8] opacity-60 hover:opacity-100 transition" title="藍"></button>
+              </div>
+              <div class="flex items-center gap-1">
+                <button type="button" onclick="undoCanvasMark()" class="px-2 py-1 rounded-lg text-xs text-slate-300 hover:bg-slate-800" title="復原">
+                  ↩️
+                </button>
+                <button type="button" onclick="clearCanvasMarks()" class="px-2 py-1 rounded-lg text-xs text-rose-400 hover:bg-rose-950/50" title="清除標記">
+                  🗑️
+                </button>
+              </div>
+            </div>
+
+            <!-- Interactive Photo Canvas + Circled Dark Inspection Caption Bar -->
+            <div class="rounded-2xl overflow-hidden border border-slate-700 bg-[#111827] select-none shadow-lg">
+              <div class="relative">
+                <canvas id="defect-canvas" width="600" height="420" class="w-full h-auto block cursor-crosshair touch-none"></canvas>
+                <button type="button" id="pwa-canvas-retake-btn" onclick="retakePwaPhoto()" class="hidden absolute top-2 right-2 z-10 px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold shadow-lg">
+                  🔄 重拍
+                </button>
+                <div class="absolute bottom-2 left-2 right-2 pointer-events-none flex items-center justify-between text-[11px] bg-slate-950/85 px-2.5 py-1 rounded-lg text-slate-300 border border-slate-800">
+                  <span id="canvas-guide-hint">👆 點擊畫布拍照，拖曳即可畫紅圈</span>
+                  <span id="canvas-mark-count" class="text-amber-400 font-semibold">已標記 0 處</span>
+                </div>
+              </div>
+              <!-- Circled Top Feature: Dark Inspection Caption Bar -->
+              <div class="bg-[#111827] border-t border-slate-800 px-3 py-2.5 text-center space-y-0.5">
+                <div id="step1-photo-caption-title" class="text-xs sm:text-sm font-extrabold text-amber-400 tracking-wide">
+                  【現場查驗】A棟新建工程 (宏昇營造) ｜ A棟-2F
+                </div>
+                <div id="step1-photo-caption-sub" class="text-[11px] text-slate-300 font-medium">
+                  拍攝時間：2026-10-22 10:12 ｜ 查驗員：陳工程師
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button type="button" onclick="goToPwaCard(2)" class="w-full py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-1.5">
+            <span>下一頁：填寫位置與說明 (2/4) ➔</span>
+          </button>
+        </div>
+
+        <!-- CARD BODY 2 / 4: 查驗位置與缺失說明 -->
+        <div id="pwa-step-2" class="hidden page-card p-3.5 space-y-3.5 flex-1 flex flex-col justify-between">
+          <div class="space-y-3.5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold text-xs border border-amber-500/30">2 / 4</span>
+                <h2 class="text-sm font-bold text-white">📍 查驗位置與缺失說明</h2>
+              </div>
+              <button type="button" id="voice-btn" onclick="triggerVoiceInput()" class="px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-xs font-semibold flex items-center gap-1 transition">
+                <span id="voice-icon">🎙️</span>
+                <span id="voice-text">語音輸入</span>
+              </button>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2">
+              <div>
+                <label for="pwa-building" class="block text-xs text-slate-400 mb-1">棟別</label>
+                <input type="text" id="pwa-building" list="list-building" placeholder="直接輸入或選常用棟別" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none" />
+                <datalist id="list-building"></datalist>
+              </div>
+              <div>
+                <label for="pwa-floor" class="block text-xs text-slate-400 mb-1">樓層 / 戶別</label>
+                <input type="text" id="pwa-floor" list="list-floor" placeholder="直接輸入或選常用樓層／戶別" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none" />
+                <datalist id="list-floor"></datalist>
+              </div>
+              <div>
+                <label for="pwa-area" class="block text-xs text-slate-400 mb-1">區域位置</label>
+                <input type="text" id="pwa-area" list="list-area" placeholder="直接輸入或選常用區域" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none" />
+                <datalist id="list-area"></datalist>
+              </div>
+            </div>
+
+            <div class="space-y-1.5">
+              <div class="text-xs text-rose-300 font-semibold">⚠️ 現場缺失現況說明（點擊詞彙可快速帶入）：</div>
+              <div class="flex flex-wrap gap-1.5">
+                <button type="button" onclick="appendDefectTag('樓層分電箱活線裸露未設臨時防護面板與感電警示貼紙')" class="px-2 py-1 rounded-lg bg-rose-950/50 hover:bg-rose-500/20 text-rose-200 text-[11px] border border-rose-500/40 transition">
+                  + 分電箱活線裸露
+                </button>
+                <button type="button" onclick="appendDefectTag('牆面裂縫需修補')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-amber-500/20 hover:text-amber-300 text-[11px] text-slate-200 border border-slate-700 transition">
+                  + 牆面裂縫
+                </button>
+                <button type="button" onclick="appendDefectTag('地壁磚空心需重貼')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-amber-500/20 hover:text-amber-300 text-[11px] text-slate-200 border border-slate-700 transition">
+                  + 磁磚空心
+                </button>
+                <button type="button" onclick="appendDefectTag('管線滲水需止水防水')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-amber-500/20 hover:text-amber-300 text-[11px] text-slate-200 border border-slate-700 transition">
+                  + 管線滲水
+                </button>
+                <button type="button" onclick="appendDefectTag('油漆不平整需重刷')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-amber-500/20 hover:text-amber-300 text-[11px] text-slate-200 border border-slate-700 transition">
+                  + 油漆不均
+                </button>
+                <button type="button" onclick="appendDefectTag('窗框矽利康漏打')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-amber-500/20 hover:text-amber-300 text-[11px] text-slate-200 border border-slate-700 transition">
+                  + 矽利康漏打
+                </button>
+              </div>
+              <textarea id="pwa-note" rows="2" placeholder="例如：樓層分電箱活線裸露未設臨時防護面板與感電警示貼紙" class="w-full bg-slate-950 border border-rose-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-rose-400 focus:outline-none">樓層分電箱活線裸露未設臨時防護面板與感電警示貼紙</textarea>
+            </div>
+
+            <div class="space-y-1.5">
+              <div class="text-xs text-emerald-300 font-semibold">🛠️ 改善要求與預防措施（點擊詞彙可快速帶入）：</div>
+              <div class="flex flex-wrap gap-1.5">
+                <button type="button" onclick="setActionNoteTag('請立即加裝絕緣防護內蓋並張貼「送電中勿動」警示標誌')" class="px-2 py-1 rounded-lg bg-emerald-950/50 hover:bg-emerald-500/20 text-emerald-200 text-[11px] border border-emerald-500/40 transition">
+                  + 加裝絕緣內蓋與警示標誌
+                </button>
+                <button type="button" onclick="setActionNoteTag('請打除空心裂縫處，掛網重新粉光抹平並養護')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-emerald-500/20 text-slate-200 text-[11px] border border-slate-700 transition">
+                  + 掛網重新粉光抹平
+                </button>
+                <button type="button" onclick="setActionNoteTag('請完成止水防水補強並進行48小時試水查驗')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-emerald-500/20 text-slate-200 text-[11px] border border-slate-700 transition">
+                  + 防水補強試水查驗
+                </button>
+              </div>
+              <textarea id="pwa-action-note" rows="2" placeholder="例如：請立即加裝絕緣防護內蓋並張貼「送電中勿動」警示標誌" class="w-full bg-slate-950 border border-emerald-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-emerald-400 focus:outline-none">請立即加裝絕緣防護內蓋並張貼「送電中勿動」警示標誌</textarea>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 pt-2">
+            <button type="button" onclick="goToPwaCard(1)" class="py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition">
+              ⬅ 上一頁：拍照圈選
+            </button>
+            <button type="button" onclick="goToPwaCard(3)" class="py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition">
+              下一頁：工種派單 (3/4) ➔
+            </button>
+          </div>
+        </div>
+
+        <!-- CARD BODY 3 / 4: 責任工種與一鍵派單 -->
+        <div id="pwa-step-3" class="hidden page-card p-3.5 space-y-3.5 flex-1 flex flex-col justify-between">
+          <div class="space-y-3.5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold text-xs border border-amber-500/30">3 / 4</span>
+                <h2 class="text-sm font-bold text-white">👷 責任工種與派單</h2>
+              </div>
+              <div class="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-[11px]">
+                <button type="button" id="sev-high" onclick="selectDefectSeverity('重大缺失')" class="px-2 py-0.5 rounded bg-rose-600 text-white font-bold transition">🚨 重大</button>
+                <button type="button" id="sev-normal" onclick="selectDefectSeverity('一般缺失')" class="px-2 py-0.5 rounded text-slate-400 hover:text-white transition">⚠️ 一般</button>
+                <button type="button" id="sev-minor" onclick="selectDefectSeverity('輕微改善')" class="px-2 py-0.5 rounded text-slate-400 hover:text-white transition">📌 輕微</button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2" id="trade-grid"></div>
+            <input type="text" id="pwa-trade-custom" list="list-trade" placeholder="或自行輸入工種名稱" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none" onchange="selectTrade(this.value.trim())" />
+            <datalist id="list-trade"></datalist>
+
+            <div class="space-y-3 pt-1">
+              <div>
+                <label for="pwa-vendor" class="block text-xs text-slate-400 mb-1">負責廠商 / 師傅名稱（可自行輸入）</label>
+                <input type="text" id="pwa-vendor" placeholder="請輸入廠商或師傅名稱（如：泥作陳師傅）" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white focus:border-amber-500 focus:outline-none" />
+              </div>
+              <div>
+                <label for="pwa-sla" class="block text-xs text-slate-400 mb-1">改善期限</label>
+                <select id="pwa-sla" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white focus:border-amber-500 focus:outline-none">
+                  <option value="1">🔥 特急件：24 小時內改善</option>
+                  <option value="3" selected>⚡ 標準件：3 天內改善完畢</option>
+                  <option value="7">📅 一般件：7 天內改善完畢</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-2 pt-2">
+            <button type="button" id="pwa-submit-btn" onclick="submitPwaDefect()" class="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 transition">
+              <span id="pwa-submit-btn-text">🚀 確認派單並傳到 LINE（選群組）</span>
+            </button>
+            <p id="pwa-submit-hint" class="hidden text-[11px] text-center text-amber-300 font-medium">同一編號將覆蓋雲端現場圖與派工單，不會新開一筆。</p>
+            <button type="button" onclick="goToPwaCard(2)" class="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition">
+              ⬅ 上一頁：修改位置與說明
+            </button>
+          </div>
+        </div>
+
+        <!-- CARD BODY 4 / 4: 派單完成・LINE 通知卡片 -->
+        <div id="pwa-step-4" class="hidden page-card flex-1 flex flex-col justify-between">
+          <div class="bg-[#06C755] px-3.5 py-2 flex items-center justify-between text-white">
+            <div class="flex items-center gap-1.5">
+              <span class="px-1.5 py-0.5 rounded bg-black/25 text-[10px] font-bold">4 / 4</span>
+              <h3 class="text-xs font-bold" id="line-sim-timestamp">💬 缺失改善派單通知卡</h3>
+            </div>
+            <button type="button" onclick="startNewBlankTicket()" class="px-2.5 py-1 rounded-lg bg-black/25 hover:bg-black/40 text-white text-xs font-bold transition">
+              ➕ 拍下一筆
+            </button>
+          </div>
+
+          <div class="p-3 space-y-3 flex-1 flex flex-col justify-between">
+            <!-- Exact Inspection & Tri-Party Signature Card Matching Uploaded Reference Image -->
+            <div id="dispatch-form-sheet" class="bg-[#f8fafc] text-slate-900 rounded-2xl shadow-xl overflow-hidden border border-slate-300 p-3 space-y-3">
+
+              <!-- Top Photo Frame + Circled Dark Caption Bar -->
+              <div class="rounded-2xl overflow-hidden bg-[#18181b] border border-slate-800 shadow">
+                <div class="relative aspect-[16/10] bg-slate-950 overflow-hidden flex items-center justify-center">
+                  <img id="line-card-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="缺失照片預覽" class="w-full h-full object-cover" />
+                  <span id="line-card-trade" class="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-slate-950/85 text-amber-300 text-[11px] font-bold">
+                    💧 水電工程
+                  </span>
+                  <span id="line-card-sla" class="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-rose-600 text-white text-[11px] font-bold shadow">
+                    限期改善
+                  </span>
+                </div>
+                <!-- CIRCLED PART 1: Dark Photo Caption Bar -->
+                <div class="bg-[#18181b] px-3 py-2.5 text-center border-t border-slate-800 space-y-0.5">
+                  <div id="line-card-photo-caption-main" class="text-xs sm:text-sm font-extrabold text-amber-400 tracking-wide">
+                    【現場查驗】A棟新建工程 (宏昇營造) ｜ A棟-2F
+                  </div>
+                  <div id="line-card-photo-caption-sub" class="text-[11px] text-slate-300 font-medium">
+                    拍攝時間：2026-10-22 10:12 ｜ 查驗員：陳工程師
+                  </div>
+                </div>
+              </div>
+
+              <!-- Middle Two Boxes: 現場缺失現況說明 & 改善要求與預防措施 -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div class="rounded-xl bg-[#fff1f2] border border-[#fecdd3] p-3 space-y-1">
+                  <div class="text-[11px] font-bold text-[#9f1239] flex items-center gap-1">
+                    <span>⚠️ 現場缺失現況說明</span>
+                  </div>
+                  <div id="line-card-note" class="text-xs sm:text-sm font-extrabold text-slate-900 leading-snug">
+                    樓層分電箱活線裸露未設臨時防護面板與感電警示貼紙
+                  </div>
+                </div>
+                <div class="rounded-xl bg-[#ecfdf5] border border-[#a7f3d0] p-3 space-y-1">
+                  <div class="text-[11px] font-bold text-[#065f46] flex items-center gap-1">
+                    <span>🛠️ 改善要求與預防措施</span>
+                  </div>
+                  <div id="line-card-action-note" class="text-xs sm:text-sm font-extrabold text-slate-900 leading-snug">
+                    請立即加裝絕緣防護內蓋並張貼「送電中勿動」警示標誌
+                  </div>
+                </div>
+              </div>
+
+              <!-- Hidden compatibility elements for existing scripts -->
+              <div class="hidden">
+                <span id="line-card-id">#20261021-006-水電工程</span>
+                <span id="line-card-loc">📍 A棟-2F</span>
+                <span id="line-card-vendor">宏昇水電工程</span>
+                <span id="line-card-url">🔗 #/vendor/new</span>
+              </div>
+
+              <!-- CIRCLED PART 2: 三方簽章覆核 (點選任一方格即可開啟「手寫簽名板」進行電子簽名) -->
+              <div class="rounded-2xl bg-[#f1f5f9] border border-slate-300 p-3 space-y-2.5">
+                <div class="flex flex-wrap items-center justify-between gap-1.5">
+                  <div class="text-[11px] sm:text-xs font-extrabold text-slate-700">
+                    三方簽章覆核 (點選任一方格即可開啟「手寫簽名板」進行電子簽名)
+                  </div>
+                  <button type="button" onclick="openSignaturePadModal('inspector', null)" class="px-2.5 py-1 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[11px] font-extrabold transition shadow-sm">
+                    ✍️ 點擊方格立即手寫簽核
+                  </button>
+                </div>
+
+                <!-- 3 Clickable Electronic Signature Boxes -->
+                <div id="step4-tri-signature-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-2"></div>
+
+                <!-- Bottom System Auto-Layout Footer -->
+                <div class="pt-1 border-t border-slate-200/90 flex flex-wrap items-center justify-between gap-1 text-[10px] sm:text-[11px] text-slate-500 font-medium">
+                  <span>由「工地缺失改善管理系統」自動排版生成 (適配手機 LINE 閱讀)</span>
+                  <span id="line-card-report-code" class="mono font-semibold text-slate-600">產出編號：20261021-006-水電工程</span>
+                </div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="pt-1 space-y-1.5" data-capture-ignore="1">
+                <button type="button" onclick="beginRetakeDispatchedPhoto()" class="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow transition">
+                  📷 這張拍不好・重拍並覆蓋雲端
+                </button>
+                <button type="button" id="line-push-btn" onclick="sendDispatchToLine()" class="w-full py-2.5 rounded-xl bg-[#06C755] hover:bg-[#05b34c] text-white font-bold text-xs shadow transition flex items-center justify-center gap-1">
+                  <span>📲 傳送到 LINE（選群組後送出）</span>
+                </button>
+                <div class="grid grid-cols-3 gap-1.5">
+                  <button type="button" onclick="openVendorFromLineCard()" class="py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[11px] transition">
+                    🔧 廠商回報
+                  </button>
+                  <button type="button" onclick="openSinglePdfModal(null)" class="py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold text-[11px] transition">
+                    📄 列印 PDF
+                  </button>
+                  <button type="button" onclick="copyCurrentMagicLink()" class="py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold text-[11px] transition">
+                    🔗 複製文字
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <button type="button" onclick="goToPwaCard(3)" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition">
+              ⬅ 上一頁：返回派單設定
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VIEW 2: 廠商回報端（整個畫面僅顯示一張整合式單卡）
+         ========================================== -->
+    <section id="view-vendor" class="hidden flex-1 flex flex-col">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col flex-1">
+
+        <!-- Integrated Header Inside the Single Vendor Card -->
+        <div class="bg-slate-950 px-3 py-2.5 border-b border-slate-800 space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-bold text-emerald-400 shrink-0">👷 缺失單：</span>
+            <select id="vendor-ticket-select" onchange="selectVendorTicket(this.value)" aria-label="選擇缺失單" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none truncate">
+            </select>
+          </div>
+          <div class="grid grid-cols-2 gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
+            <button type="button" id="vendor-pill-1" onclick="goToVendorCard(1)" class="py-1.5 px-2 rounded-md font-bold bg-emerald-500 text-slate-950 text-center transition shadow">
+              ① 查看缺失與進場
+            </button>
+            <button type="button" id="vendor-pill-2" onclick="goToVendorCard(2)" class="py-1.5 px-2 rounded-md font-medium text-slate-400 hover:text-white text-center transition">
+              ② 上傳完工照回報
+            </button>
+          </div>
+        </div>
+
+        <!-- Empty State Inside the Card -->
+        <div id="vendor-empty-card" class="hidden p-8 text-center space-y-3 flex-1 flex flex-col items-center justify-center">
+          <div class="text-3xl">📭</div>
+          <div class="text-sm font-bold text-white">目前尚無派單紀錄</div>
+          <p class="text-xs text-slate-400">請先由「1.拍照派單」新增一筆工地缺失，即可在此進行廠商完工回報。</p>
+          <button type="button" onclick="switchMainTab('pwa'); goToPwaCard(1);" class="px-4 py-2.5 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs shadow">
+            ➕ 前往拍照派單
+          </button>
+        </div>
+
+        <!-- VENDOR STEP 1 / 2 -->
+        <div id="vendor-card-1" class="page-card p-3.5 space-y-3 flex-1 flex flex-col justify-between">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between text-xs bg-slate-950 px-3 py-2 rounded-xl border border-slate-800">
+              <div class="flex items-center gap-1.5 text-emerald-300 font-medium truncate">
+                <span>負責廠商：</span>
+                <span id="vendor-view-contractor" class="font-bold text-white truncate">未指定</span>
+              </div>
+              <span id="vendor-view-status-badge" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+                待改善
+              </span>
+            </div>
+
+            <div id="vendor-progress-stepper" class="grid grid-cols-4 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px] text-center">
+              <div id="vstep-open" class="py-1 px-1 rounded-lg font-bold bg-emerald-500 text-slate-950">1.待改善</div>
+              <div id="vstep-progress" class="py-1 px-1 rounded-lg font-medium text-slate-400 bg-slate-950">2.施工中</div>
+              <div id="vstep-review" class="py-1 px-1 rounded-lg font-medium text-slate-400 bg-slate-950">3.待複驗</div>
+              <div id="vstep-closed" class="py-1 px-1 rounded-lg font-medium text-slate-400 bg-slate-950">4.已結案</div>
+            </div>
+
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1">
+              <div class="flex items-center justify-between text-xs">
+                <span id="vendor-view-id" class="mono text-amber-400 font-bold">#20261109-001-鋁門窗</span>
+                <span id="vendor-view-deadline" class="text-rose-400 font-semibold">⏰ 期限</span>
+              </div>
+              <h3 id="vendor-view-location" class="text-sm font-bold text-white">📍 查驗位置</h3>
+              <p id="vendor-view-note" class="text-xs text-slate-200 leading-relaxed pt-1 border-t border-slate-800/80">
+                缺失說明
+              </p>
+            </div>
+
+            <div class="rounded-xl overflow-hidden border border-slate-700 bg-slate-950 aspect-[4/3]">
+              <img id="vendor-view-before-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="改善前缺失照片" class="w-full h-full object-cover" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 pt-2">
+            <button type="button" onclick="vendorMarkInProgress()" class="py-3.5 px-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition">
+              🛠️ 回報「施工中」
+            </button>
+            <button type="button" onclick="goToVendorCard(2)" class="py-3.5 px-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg shadow-emerald-500/20 transition">
+              下一頁：傳完工照 ➔
+            </button>
+          </div>
+        </div>
+
+        <!-- VENDOR STEP 2 / 2 -->
+        <div id="vendor-card-2" class="hidden page-card p-3 space-y-2.5 flex-1 flex flex-col justify-between">
+          <div class="space-y-2.5">
+            <!-- Top Action Bar: Step 1 Upload Photo + Step 2 Immediate LINE Report Button -->
+            <div class="grid grid-cols-3 gap-2">
+              <button type="button" onclick="openPhotoPicker('vendor','camera')" class="py-2.5 px-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-[11px] font-bold shadow">
+                📷 拍照
+              </button>
+              <button type="button" onclick="openPhotoPicker('vendor','gallery')" class="py-2.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold">
+                🖼 上傳圖片
+              </button>
+              <button type="button" onclick="vendorSubmitCompletion()" class="py-2.5 px-2 rounded-xl bg-[#06C755] hover:bg-[#05b34c] text-white text-[11px] font-bold shadow">
+                💬 LINE
+              </button>
+              <input type="file" id="vendor-after-camera" accept="image/*" capture="environment" class="hidden" onchange="handleVendorAfterUpload(event)" />
+              <input type="file" id="vendor-after-gallery" accept="image/*" class="hidden" onchange="handleVendorAfterUpload(event)" />
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-1.5 bg-slate-950 px-2 py-1.5 rounded-xl border border-slate-800">
+              <div class="flex items-center gap-1">
+                <button type="button" id="vtool-circle" onclick="setVendorDrawTool('circle')" class="px-2 py-1 rounded-lg text-[11px] font-medium bg-rose-600 text-white shadow">⭕ 紅圈</button>
+                <button type="button" id="vtool-arrow" onclick="setVendorDrawTool('arrow')" class="px-2 py-1 rounded-lg text-[11px] font-medium text-slate-300 hover:bg-slate-800">↗️ 箭頭</button>
+                <button type="button" id="vtool-pen" onclick="setVendorDrawTool('pen')" class="px-2 py-1 rounded-lg text-[11px] font-medium text-slate-300 hover:bg-slate-800">✏️ 畫筆</button>
+              </div>
+              <div class="flex items-center gap-1">
+                <button type="button" onclick="undoVendorAfterMark()" class="px-2 py-1 rounded-lg text-[11px] text-slate-300 hover:bg-slate-800">↩️</button>
+                <button type="button" onclick="clearVendorAfterMarks()" class="px-2 py-1 rounded-lg text-[11px] text-rose-400 hover:bg-rose-950/50">🗑️</button>
+              </div>
+            </div>
+            <div class="rounded-xl overflow-hidden border border-dashed border-emerald-500/50 bg-slate-950 relative">
+              <canvas id="vendor-after-canvas" width="600" height="420" class="w-full h-auto block cursor-crosshair touch-none"></canvas>
+              <img id="vendor-view-after-img" alt="改善後照片預覽" class="hidden" />
+              <span id="vendor-after-badge" class="absolute top-2 left-2 px-2.5 py-0.5 rounded bg-emerald-600/95 text-white text-[11px] font-bold shadow pointer-events-none">
+                完工照：拍照後可畫紅圈標記修繕位置
+              </span>
+            </div>
+
+            <!-- Quick Reply Note -->
+            <div class="space-y-1.5">
+              <div class="flex flex-wrap gap-1">
+                <button type="button" onclick="setVendorQuickReply('已依規定修補改善完成，請工務複驗。')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-emerald-500/20 hover:text-emerald-300 text-[11px] text-slate-200 border border-slate-700 transition">
+                  + 已改善完成請複驗
+                </button>
+                <button type="button" onclick="setVendorQuickReply('已完成重新粉光抹平與清潔。')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-emerald-500/20 hover:text-emerald-300 text-[11px] text-slate-200 border border-slate-700 transition">
+                  + 重新抹平完成
+                </button>
+                <button type="button" onclick="setVendorQuickReply('已完成防水補強並試水合格。')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-emerald-500/20 hover:text-emerald-300 text-[11px] text-slate-200 border border-slate-700 transition">
+                  + 防水試水合格
+                </button>
+              </div>
+              <input id="vendor-reply-note" type="text" value="已依規定修補改善完成，請工務複驗。" placeholder="請輸入完工回報說明..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <div class="space-y-1.5 pt-1">
+            <button type="button" onclick="vendorSubmitCompletion()" class="w-full py-3.5 rounded-xl bg-[#06C755] hover:bg-[#05b34c] text-white font-bold text-sm shadow-lg shadow-emerald-500/25 transition flex items-center justify-center gap-1.5">
+              <span>💬 確認完工 ＋ 開啟 LINE 傳送回報</span>
+            </button>
+            <button type="button" onclick="goToVendorCard(1)" class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition">
+              ⬅ 上一頁：查看缺失位置與改善前照片
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VIEW 3: 工程師查驗與結案（現場核對無誤後，三方簽章勾選結案）
+         ========================================== -->
+    <section id="view-admin" class="hidden flex-1 flex flex-col">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col flex-1">
+
+        <!-- Integrated Header Inside the Engineer Inspection & Closure Card -->
+        <div class="bg-slate-950 px-3 py-2.5 border-b border-slate-800 space-y-2">
+          <div class="flex items-center justify-between gap-1 text-xs">
+            <div class="flex items-center gap-1.5">
+              <span class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 font-bold text-[11px]">3. 工程師查驗與結案</span>
+              <span class="text-slate-400 text-[11px]">查驗人：<strong id="admin-inspector-label" class="text-emerald-300">陳工程師</strong></span>
+            </div>
+            <div class="flex items-center gap-1">
+              <button type="button" onclick="openPhotoQueryModal()" class="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-[11px] shadow transition">
+                🖼️ 照片查詢
+              </button>
+              <button type="button" onclick="openReportExportModal()" class="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] shadow transition">
+                📑 匯出報表
+              </button>
+            </div>
+          </div>
+
+          <!-- 4 Status Filter Pills (All / Open / Pending / Closed) + Trade Filter -->
+          <div class="grid grid-cols-5 gap-1 text-[10px]">
+            <button type="button" id="adm-st-ALL" onclick="setAdminStatusFilter('ALL')" class="py-1 px-1 rounded-lg font-bold bg-amber-500 text-slate-950 transition">
+              全部 (<span id="kpi-total">0</span>)
+            </button>
+            <button type="button" id="adm-st-OPEN" onclick="setAdminStatusFilter('OPEN')" class="py-1 px-1 rounded-lg font-medium bg-slate-900 text-rose-300 border border-slate-800 transition">
+              待改善 (<span id="kpi-overdue">0</span>)
+            </button>
+            <button type="button" id="adm-st-PENDING_REVIEW" onclick="setAdminStatusFilter('PENDING_REVIEW')" class="py-1 px-1 rounded-lg font-medium bg-slate-900 text-amber-300 border border-slate-800 transition">
+              待查驗 (<span id="kpi-review">0</span>)
+            </button>
+            <button type="button" id="adm-st-CLOSED" onclick="setAdminStatusFilter('CLOSED')" class="py-1 px-1 rounded-lg font-medium bg-slate-900 text-emerald-300 border border-slate-800 transition">
+              已結案 (<span id="kpi-closed">0</span>)
+            </button>
+            <button type="button" id="adm-st-VOIDED" onclick="setAdminStatusFilter('VOIDED')" class="py-1 px-1 rounded-lg font-medium bg-slate-900 text-slate-300 border border-slate-800 transition">
+              消案 (<span id="kpi-voided">0</span>)
+            </button>
+          </div>
+
+          <div class="grid grid-cols-2 gap-1.5">
+            <select id="admin-filter-trade" onchange="resetAdminCardIndexAndRender()" aria-label="篩選工種" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white focus:border-amber-500 focus:outline-none">
+              <option value="ALL">全部責任工種</option>
+              <option value="泥作工程">🧱 泥作工程</option>
+              <option value="水電工程">💧 水電工程</option>
+              <option value="油漆工程">🎨 油漆工程</option>
+              <option value="木作工程">🪵 木作工程</option>
+              <option value="鋁門窗">🪟 鋁門窗</option>
+              <option value="機電消防">⚡ 機電消防</option>
+            </select>
+            <label class="flex items-center justify-center gap-1.5 px-2 py-1 rounded-lg bg-rose-950/40 border border-rose-500/30 text-xs text-rose-300 cursor-pointer select-none truncate">
+              <input type="checkbox" id="admin-filter-overdue" onchange="resetAdminCardIndexAndRender()" class="rounded border-rose-500 text-rose-600 focus:ring-0" />
+              <span>⚠️ 僅看逾期未結案</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Single Card Body Deck (Shows Before/After Comparison + Tri-Party Sign-off Checkboxes + One-Click Approve/Close) -->
+        <div id="admin-single-card-deck" class="p-3.5 flex-1 flex flex-col justify-between"></div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Hidden Compatibility & Preload Nodes -->
+  <div class="hidden" aria-hidden="true">
+    <img id="preload-crack-before" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" />
+    <img id="preload-crack-after" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" />
+    <img id="preload-pipe-before" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" />
+    <img id="preload-pipe-after" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" />
+    <section id="view-arch"></section>
+    <button type="button" id="tab-btn-arch" onclick="switchMainTab('arch')">📐 4.架構</button>
+    <span id="theme-toggle-label">淺色</span>
+    <span id="vendor-badge">LINE直達</span>
+    <button type="button" onclick="switchMainTab('pwa')">1.拍照派單</button>
+    <button type="button" onclick="switchMainTab('vendor')">2.廠商回報</button>
+    <button type="button" onclick="switchMainTab('admin')">3.看板 0</button>
+
+    <button type="button" onclick="vendorSubmitCompletion()">✅ 送出完工回報（送交複驗）</button>
+    <button type="button" onclick="startNewBlankTicket()">➕ 新增下一筆</button>
+    <button type="button" onclick="openVendorFromLineCard()">🔧 開啟「廠商回報卡」上傳完工照</button>
+    <button type="button" onclick="openSinglePdfModal(null)">📄 預覽 / 列印 PDF</button>
+    <button type="button" onclick="copyCurrentMagicLink()">🔗 複製通知文字</button>
+
+    <span id="DEF-2026-100"></span>
+    <span id="DEF-2026-101"></span>
+    <span id="DEF-2026-102"></span>
+    <span id="DEF-2026-103"></span>
+    <span id="DEF-2026-104"></span>
+    <button type="button" onclick="setReviewCompareMode('slider')">↔️ 滑桿疊圖比對 (拖曳檢視)</button>
+    <button type="button" onclick="setReviewCompareMode('side')">🖼️ 雙圖並排對照</button>
+    <button type="button" onclick="toggleAppTheme()">☀️ 淺色</button>
+
+    <span id="vendor-magic-url-display">#/vendor/new</span>
+    <span id="kpi-open">0</span>
+    <span id="kpi-progress">0</span>
+    <span id="kpi-rate">0%</span>
+    <span id="admin-progress-summary-text"></span>
+    <div id="admin-trade-pills"></div>
+    <div id="admin-multi-progress-bar"></div>
+    <select id="admin-filter-building" onchange="resetAdminCardIndexAndRender()"><option value="ALL">全部棟別</option></select>
+    <input type="search" id="admin-search-input" oninput="renderAdminBoard()" />
+    <button type="button" id="mode-btn-kanban" onclick="setAdminDisplayMode('kanban')">📋 看板模式 (Kanban)</button>
+    <button type="button" id="mode-btn-table" onclick="setAdminDisplayMode('table')">📊 列表模式 (Table)</button>
+    <div id="admin-kanban-container"></div>
+    <div id="admin-table-container"><tbody id="admin-table-body"></tbody></div>
+    <div id="sites-fix-banner">
+      <button type="button" id="toggle-sites-details-btn" onclick="toggleSitesBannerDetails()">▼ 展開原因說明</button>
+      <div id="sites-fix-details"></div>
+    </div>
+    <pre id="line-json-code">{}</pre>
+    <button type="button" onclick="copyJsonPayload()">📋 複製 JSON</button>
+    <button type="button" onclick="loadSamplePreset('crack')">🧱 載入範例 1：泥作牆面裂縫</button>
+    <button type="button" onclick="loadSamplePreset('pipe')">💧 載入範例 2：水電管線滲漏</button>
+    <button type="button" onclick="useSampleAfterPhoto()">✨ 帶入現場修補完成照片</button>
+    <button type="button" onclick="clearSampleForm()">🗑️ 移除範例</button>
+    <button type="button" onclick="clearAllSampleDefects()">🗑️ 清空範例</button>
+    <button type="button" onclick="goToPwaCard(1)">① 拍照圈選</button>
+    <button type="button" onclick="goToPwaCard(2)">② 位置與描述</button>
+    <button type="button" onclick="goToPwaCard(2)">② 位置說明</button>
+    <button type="button" onclick="goToPwaCard(3)">③ 工種與派單</button>
+    <button type="button" onclick="goToPwaCard(3)">③ 工種派單</button>
+    <button type="button" onclick="goToPwaCard(4)">④ LINE通知</button>
+    <button type="button" onclick="goToPwaCard(2)">下一步：填寫位置與說明 (2/4) ➔</button>
+    <button type="button" onclick="goToPwaCard(1)">⬅ 上一步：拍照圈選</button>
+    <button type="button" onclick="goToPwaCard(3)">下一步：選擇工種 (3/4) ➔</button>
+    <button type="button" onclick="goToPwaCard(2)">⬅ 上一步：修改位置</button>
+    <button type="button" onclick="goToPwaCard(1)">➕ 拍下一筆</button>
+    <button type="button" onclick="goToVendorCard(1)">① 缺失照片與進場確認</button>
+    <button type="button" onclick="goToVendorCard(2)">② 上傳完工照片送複驗</button>
+    <button type="button" onclick="goToVendorCard(2)">下一步：傳完工照 ➔</button>
+    <button type="button" onclick="goToVendorCard(1)">⬅ 上一步：返回查看缺失位置與改善前照片</button>
+    <button type="button" onclick="toggleAppTheme()">☀️ 陽光淺色</button>
+    <button type="button" onclick="vendorSubmitCompletion()">✅ 確認送出改善成果（通知工務主任複驗）</button>
+    <button type="button" onclick="vendorSubmitCompletion()">✅ 確認送出改善成果（通知工務複驗）</button>
+    <button type="button" onclick="switchMainTab('vendor')">👷 2. 廠商免登入連結端 LINE直達</button>
+    <button type="button" onclick="switchMainTab('vendor')">👷 2.廠商端</button>
+    <button type="button" onclick="openSinglePdfModal(null)">📄 下載單筆缺失改善單 (PDF)</button>
+    <button type="button" onclick="openSinglePdfModal(null)">📄 下載改善單 PDF</button>
+    <button type="button" onclick="openSinglePdfModal(null)">📄 匯出單筆缺失單 (PDF)</button>
+    <button type="button" onclick="openSinglePdfModal(null)">📄 預覽改善單 PDF</button>
+    <button type="button" onclick="copyFullHtmlForGoogleSites()">📋 一鍵複製完整 HTML 程式碼 (貼入 Google Sites)</button>
+    <button type="button" onclick="openEmbedGuideModal()">📖 查看 3 步驟圖文修正教學</button>
+    <button type="button" onclick="switchMainTab('pwa')">📱 1. 工地端 PWA (極速派單)</button>
+    <button type="button" onclick="switchMainTab('pwa')">📱 1.派單</button>
+    <button type="button" onclick="resetAdminFilters()">🔄 重置</button>
+    <button type="button" onclick="switchMainTab('arch')">📐 4. 系統架構・Schema・LINE 串接規格</button>
+    <button type="button" onclick="openReportExportModal()">📑 匯出工地品質驗收日報 / 週報 (PDF / Excel)</button>
+    <button type="button" onclick="openReportExportModal()">📑 匯出週報</button>
+    <button type="button" onclick="switchMainTab('admin')">🖥️ 3. 後台管理看板 2 待複驗</button>
+    <button type="button" onclick="switchMainTab('admin')">🖥️ 3.看板 2</button>
+    <button type="button" onclick="openEmbedGuideModal()">🛠️ 點此修正 Google Sites 嵌入 / 找不到網址</button>
+    <button type="button" onclick="vendorMarkInProgress()">🛠️ 點擊回報「已進場改善中」</button>
+    <button type="button" onclick="vendorMarkInProgress()">🛠️ 回報「已進場施工」</button>
+    <button type="button" onclick="copyCurrentMagicLink()">🔗 複製專屬缺失連結</button>
+    <button type="button" onclick="copyCurrentMagicLink()">🔗 複製專屬連結</button>
+    <button type="button" onclick="openVendorFromLineCard()">🔧 免登入開啟缺失單 & 上傳改善照片</button>
+    <button type="button" onclick="submitPwaDefect()">🚀 一鍵派單 ＋ 推播廠商 LINE 專屬連結</button>
+    <button type="button" onclick="undoCanvasMark()">↩️ 復原</button>
+    <button type="button" onclick="clearCanvasMarks()">🗑️ 清除</button>
+    <button type="button" onclick="triggerVoiceInput()">🎙️ 語音轉文字</button>
+    <button type="button" onclick="appendDefectTag('牆面裂縫')">+ 管線外露/滲水</button>
+    <button type="button" onclick="appendDefectTag('矽利康未打')">+ 矽利康未打</button>
+    <button type="button" onclick="setVendorQuickReply('裂縫掛網重抹完成')">+ 裂縫掛網重抹完成</button>
+    <button type="button" onclick="setVendorQuickReply('防水塗佈試水合格')">+ 防水塗佈試水合格</button>
+    <button type="button" onclick="setVendorQuickReply('矽利康修補收邊完成')">+ 矽利康修補收邊完成</button>
+    <button type="button" onclick="dismissSitesBanner()">✕</button>
+  </div>
+
+  <!-- ==========================================
+       MODAL: 照片查詢（R2 + D1，依工地、日期）
+       ========================================== -->
+  <div id="photo-query-modal" class="fixed inset-0 z-50 hidden bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 no-print">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+      <div class="px-3.5 py-2.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <h3 class="text-sm font-bold text-white">🖼️ 工地照片查詢</h3>
+        <button type="button" onclick="closePhotoQueryModal()" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs">✕</button>
+      </div>
+      <div class="p-3 space-y-2 border-b border-slate-800">
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label for="photo-query-site" class="text-[11px] text-slate-400 font-semibold">工地</label>
+            <input id="photo-query-site" list="photo-query-site-list" placeholder="全部工地" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-sky-500 focus:outline-none" />
+            <datalist id="photo-query-site-list"></datalist>
+          </div>
+          <div>
+            <label for="photo-query-date" class="text-[11px] text-slate-400 font-semibold">日期</label>
+            <input id="photo-query-date" type="date" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-sky-500 focus:outline-none" />
+          </div>
+        </div>
+        <button type="button" onclick="runPhotoQuery()" class="w-full py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs shadow transition">🔍 查詢照片</button>
+      </div>
+      <div class="p-3 overflow-y-auto flex-1">
+        <div id="photo-query-status" class="text-[11px] text-slate-400 mb-2">輸入工地或日期後按查詢（留空代表全部）</div>
+        <div id="photo-query-results" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 1: 複驗比對視窗
+       ========================================== -->
+  <div id="review-modal" class="fixed inset-0 z-50 hidden bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 no-print">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+      <div class="px-4 py-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span id="review-modal-id" class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold text-xs mono">#20261109-001-鋁門窗</span>
+          <h3 id="review-modal-title" class="text-sm font-bold text-white">改善前後照片比對與複驗</h3>
+        </div>
+        <button type="button" onclick="closeReviewModal()" class="text-slate-400 hover:text-white text-xs px-2 py-1 rounded-lg hover:bg-slate-800">
+          ✕ 關閉
+        </button>
+      </div>
+
+      <div class="p-4 overflow-y-auto space-y-3">
+        <div class="grid grid-cols-2 gap-2 bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs">
+          <div>
+            <div class="text-slate-400">查驗位置</div>
+            <div id="review-modal-loc" class="font-bold text-white mt-0.5">-</div>
+          </div>
+          <div>
+            <div class="text-slate-400">工種 / 廠商</div>
+            <div id="review-modal-vendor" class="font-bold text-amber-300 mt-0.5">-</div>
+          </div>
+          <div>
+            <div class="text-slate-400">改善期限</div>
+            <div id="review-modal-due" class="font-bold text-white mt-0.5">-</div>
+          </div>
+          <div>
+            <div class="text-slate-400">目前狀態</div>
+            <div id="review-modal-status" class="font-bold text-indigo-400 mt-0.5">-</div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 bg-slate-950 px-3 py-2 rounded-xl border border-slate-800">
+          <span class="text-xs font-semibold text-slate-300">比對模式：</span>
+          <div class="inline-flex rounded-lg bg-slate-900 p-0.5 border border-slate-800 text-xs">
+            <button type="button" id="cmp-btn-side" onclick="setReviewCompareMode('side')" class="px-2.5 py-1 rounded-md font-bold bg-amber-500 text-slate-950 transition">
+              🖼️ 雙圖對照
+            </button>
+            <button type="button" id="cmp-btn-slider" onclick="setReviewCompareMode('slider')" class="px-2.5 py-1 rounded-md font-medium text-slate-300 hover:text-white transition">
+              ↔️ 滑桿疊圖
+            </button>
+          </div>
+        </div>
+
+        <div id="review-slider-view" class="hidden bg-slate-950 border border-amber-500/40 rounded-xl p-3 space-y-2">
+          <div class="relative w-full aspect-[4/3] rounded-xl overflow-hidden select-none border border-slate-700 bg-slate-900">
+            <img id="review-slider-after-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="改善後" class="absolute inset-0 w-full h-full object-cover" />
+            <img id="review-slider-before-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="改善前" class="absolute inset-0 w-full h-full object-cover" style="clip-path: inset(0 50% 0 0);" />
+            <div id="review-slider-line" class="absolute top-0 bottom-0 w-1 bg-amber-400 pointer-events-none" style="left: 50%;"></div>
+          </div>
+          <input type="range" id="review-compare-range" min="0" max="100" value="50" oninput="updateReviewSliderPosition(this.value)" class="w-full accent-amber-500 cursor-pointer" />
+        </div>
+
+        <div id="review-side-by-side-view" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="bg-slate-950 border border-rose-500/40 rounded-xl p-2.5 space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-rose-400">🔴 改善前</span>
+              <span id="review-modal-created" class="text-slate-400 text-[10px]"></span>
+            </div>
+            <div class="aspect-[4/3] rounded-lg overflow-hidden bg-slate-900">
+              <img id="review-modal-before-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="改善前照片" class="w-full h-full object-cover" />
+            </div>
+            <p id="review-modal-desc" class="text-xs text-slate-300 bg-slate-900 p-2 rounded-lg"></p>
+          </div>
+
+          <div class="bg-slate-950 border border-emerald-500/40 rounded-xl p-2.5 space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-emerald-400">🟢 改善後</span>
+              <span id="review-modal-replied" class="text-slate-400 text-[10px]"></span>
+            </div>
+            <div id="review-after-box" class="aspect-[4/3] rounded-lg overflow-hidden bg-slate-900 flex items-center justify-center">
+              <img id="review-modal-after-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="改善後照片" class="w-full h-full object-cover" />
+            </div>
+            <p id="review-modal-vendor-note" class="text-xs text-emerald-200 bg-emerald-950/40 border border-emerald-800/50 p-2 rounded-lg"></p>
+          </div>
+        </div>
+
+        <div>
+          <label for="review-audit-Input" class="block text-xs text-slate-300 mb-1">複驗審核意見：</label>
+          <input id="review-audit-Input" type="text" placeholder="輸入複驗意見或退回原因..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none" />
+        </div>
+      </div>
+
+      <div class="px-4 py-3 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
+        <button type="button" onclick="openSinglePdfModalFromReview()" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700">
+          📄 匯出此筆改善單 PDF
+        </button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="rejectReviewTicket()" class="px-3 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition">
+            ❌ 退回重改 (發送 LINE 退回通知)
+          </button>
+          <button type="button" onclick="approveReviewTicket()" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg transition">
+            ✅ 複驗通過・正式結案
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 2: 單筆缺失改善單 PDF 預覽
+       ========================================== -->
+  <div id="single-pdf-modal" class="fixed inset-0 z-50 hidden bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3">
+    <div class="bg-white text-slate-900 rounded-2xl max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+      <div class="px-4 py-3 bg-slate-900 text-white flex items-center justify-between no-print">
+        <span class="text-amber-400 font-bold text-xs">📄 單筆缺失改善單 (PDF 列印預覽)</span>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="window.print()" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs">
+            🖨️ 列印 / 另存 PDF
+          </button>
+          <button type="button" onclick="closeSinglePdfModal()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs">
+            ✕ 關閉
+          </button>
+        </div>
+      </div>
+
+      <div class="p-5 overflow-y-auto space-y-3 text-xs">
+        <div class="border-b-2 border-slate-900 pb-2 flex items-start justify-between">
+          <div>
+            <div id="pdf-single-project" class="text-xs font-bold text-amber-700">專案：A棟新建工程 (宏昇營造)</div>
+            <h2 class="text-lg font-bold text-slate-900">工地缺失改善派工暨三方查驗結案單</h2>
+          </div>
+          <div class="text-right mono">
+            <div id="pdf-single-id" class="text-xs font-bold text-rose-600">單號：#20261109-001-鋁門窗</div>
+            <div id="pdf-single-date" class="text-[11px] text-slate-500">查驗人：<span id="pdf-single-inspector">陳工程師</span></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 bg-slate-100 p-3 rounded-lg border border-slate-300">
+          <div><strong>查驗位置：</strong><span id="pdf-single-loc">-</span></div>
+          <div><strong>責任工種：</strong><span id="pdf-single-trade">-</span></div>
+          <div><strong>負責廠商：</strong><span id="pdf-single-vendor">-</span></div>
+          <div><strong>改善期限：</strong><span id="pdf-single-due" class="text-rose-700 font-bold">-</span></div>
+        </div>
+
+        <!-- Dark Photo Frame + Caption Bar in PDF -->
+        <div class="rounded-2xl overflow-hidden bg-[#18181b] border border-slate-800">
+          <div class="aspect-[16/10] bg-slate-900 overflow-hidden">
+            <img id="pdf-single-before-img" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="改善前照片" class="w-full h-full object-cover" />
+          </div>
+          <div class="bg-[#18181b] px-3 py-2.5 text-center border-t border-slate-800 space-y-0.5">
+            <div id="pdf-photo-caption-main" class="text-sm font-extrabold text-amber-400">
+              【現場查驗】A棟新建工程 (宏昇營造) ｜ A棟-2F
+            </div>
+            <div id="pdf-photo-caption-sub" class="text-[11px] text-slate-300">
+              拍攝時間：2026-10-22 10:12 ｜ 查驗員：陳工程師
+            </div>
+          </div>
+        </div>
+
+        <!-- Side-by-Side 現場缺失現況說明 & 改善要求與預防措施 -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <div class="rounded-xl bg-[#fff1f2] border border-[#fecdd3] p-3 space-y-1">
+            <div class="text-[11px] font-bold text-[#9f1239]">⚠️ 現場缺失現況說明</div>
+            <div id="pdf-single-note" class="text-xs font-extrabold text-slate-900 leading-snug"></div>
+          </div>
+          <div class="rounded-xl bg-[#ecfdf5] border border-[#a7f3d0] p-3 space-y-1">
+            <div class="text-[11px] font-bold text-[#065f46]">🛠️ 改善要求與預防措施</div>
+            <div id="pdf-single-action-note" class="text-xs font-extrabold text-slate-900 leading-snug">請立即加裝絕緣防護內蓋並張貼「送電中勿動」警示標誌</div>
+          </div>
+        </div>
+
+        <div id="pdf-single-link" class="hidden">
+          <span id="pdf-sign-vendor"></span>
+          <span id="pdf-sign-inspector"></span>
+          <span id="pdf-sign-manager"></span>
+        </div>
+
+        <!-- Tri-party Electronic Signature Block in PDF -->
+        <div class="rounded-2xl bg-[#f1f5f9] border border-slate-300 p-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-extrabold text-slate-700">三方簽章覆核 (點選任一方格即可開啟「手寫簽名板」進行電子簽名)</span>
+            <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold">✍️ 點擊方格立即手寫簽核</span>
+          </div>
+          <div id="pdf-tri-signature-grid" class="grid grid-cols-3 gap-2"></div>
+          <div class="pt-1 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-500">
+            <span>由「工地缺失改善管理系統」自動排版生成 (適配手機 LINE 閱讀)</span>
+            <span id="pdf-report-code" class="mono font-semibold text-slate-600">產出編號：20261021-006-水電工程</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 3: 報表匯出視窗
+       ========================================== -->
+  <div id="report-export-modal" class="fixed inset-0 z-50 hidden bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+      <div class="px-4 py-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between no-print">
+        <h3 class="text-sm font-bold text-white">📑 缺失改善報表匯出</h3>
+        <div class="flex items-center gap-1.5">
+          <button type="button" onclick="downloadExcelCsvReport()" class="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition">
+            📊 下載 Excel (CSV) 報表
+          </button>
+          <button type="button" onclick="window.print()" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition">
+            🖨️ 列印 / 匯出 PDF 週報
+          </button>
+          <button type="button" onclick="closeReportExportModal()" class="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <div class="p-4 overflow-y-auto space-y-3 text-xs">
+        <div id="report-summary-badges" class="flex flex-wrap gap-2"></div>
+        <div class="overflow-x-auto bg-slate-950 border border-slate-800 rounded-xl">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400 bg-slate-900/70">
+                <th class="py-2 px-2.5">單號</th>
+                <th class="py-2 px-2.5">位置</th>
+                <th class="py-2 px-2.5">工種</th>
+                <th class="py-2 px-2.5">廠商</th>
+                <th class="py-2 px-2.5">缺失說明</th>
+                <th class="py-2 px-2.5">期限</th>
+                <th class="py-2 px-2.5">狀態</th>
+              </tr>
+            </thead>
+            <tbody id="report-modal-tbody" class="divide-y divide-slate-800/70 text-slate-200"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 4: Google Sites 嵌入碼複製視窗
+       ========================================== -->
+  <div id="embed-guide-modal" class="fixed inset-0 z-50 hidden bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 no-print">
+    <div class="bg-slate-900 border border-emerald-500/50 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+      <div class="px-4 py-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <h3 class="text-sm font-bold text-white">📋 複製 Google Sites 內嵌程式碼</h3>
+        <button type="button" onclick="closeEmbedGuideModal()" class="text-slate-400 hover:text-white text-xs px-2 py-1 rounded-lg hover:bg-slate-800">
+          ✕ 關閉
+        </button>
+      </div>
+      <div class="p-4 space-y-3 text-xs text-slate-300">
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="copyFullHtmlForGoogleSites()" class="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition">
+            📋 一鍵複製完整 HTML 程式碼
+          </button>
+          <button type="button" onclick="downloadStandaloneHtml()" class="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-xs transition">
+            💾 下載獨立 .html 檔案
+          </button>
+        </div>
+        <textarea id="embed-raw-html-box" readonly rows="4" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-[11px] text-emerald-300 mono focus:outline-none"></textarea>
+      </div>
+    </div>
+  </div>
+
+    <!-- ==========================================
+       MODAL 5: LINE 完工回報傳送視窗 (含自動合成前後對照圖 + 一鍵開啟 LINE)
+       ========================================== -->
+  <div id="line-report-modal" class="fixed inset-0 z-50 hidden bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-3 no-print">
+    <div class="bg-slate-900 border border-[#06C755]/60 rounded-2xl max-w-md w-full overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+      <div class="px-4 py-3 bg-[#06C755] text-white flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-base">💬</span>
+          <h3 class="text-sm font-bold">LINE 完工回報已就緒</h3>
+        </div>
+        <button type="button" onclick="closeLineReportModal()" class="text-white/90 hover:text-white text-xs px-2 py-1 rounded-lg bg-black/20">
+          ✕ 關閉
+        </button>
+      </div>
+
+      <div class="p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="bg-emerald-950/50 border border-emerald-500/40 rounded-xl p-2.5 text-emerald-200 font-medium">
+          ✅ 狀態已更新為「<strong>待複驗</strong>」。應已跳出 LINE，請選群組後按送出；沒跳出再按下方綠色按鈕。
+        </div>
+
+        <!-- Auto-generated Before/After Composite Image Preview -->
+        <div class="space-y-1">
+          <div class="text-slate-300 font-semibold flex items-center justify-between">
+            <span>📸 自動合成「改善前 / 改善後」對照圖：</span>
+            <button type="button" onclick="downloadCompositeImage()" class="text-amber-400 hover:underline font-bold">💾 下載對照圖</button>
+          </div>
+          <div class="rounded-xl overflow-hidden border border-slate-700 bg-slate-950">
+            <canvas id="line-composite-canvas" width="800" height="420" class="w-full h-auto block"></canvas>
+          </div>
+        </div>
+
+        <!-- Editable LINE Message Text -->
+        <div class="space-y-1">
+          <label for="line-report-textarea" class="block text-slate-400">預備傳送的 LINE 完工回報訊息：</label>
+          <textarea id="line-report-textarea" rows="4" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:border-[#06C755] focus:outline-none"></textarea>
+        </div>
+
+        <!-- Direct LINE Action Buttons -->
+        <div class="space-y-2 pt-1">
+          <button type="button" onclick="sendCompletionToLine()" class="w-full py-3.5 px-4 rounded-xl bg-[#06C755] hover:bg-[#05b34c] text-white font-bold text-sm shadow-lg">
+            📲 傳送到 LINE（選群組後送出）
+          </button>
+          <button type="button" onclick="downloadCompositeImage()" class="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-xs transition">
+            💾 下載前後對照照片
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 6: 手寫簽名板 (三方簽章覆核・電子簽名與方章)
+       ========================================== -->
+  <div id="signature-pad-modal" class="fixed inset-0 z-50 hidden bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-3 no-print">
+    <div class="bg-slate-900 border border-amber-500/60 rounded-2xl max-w-md w-full overflow-hidden shadow-2xl flex flex-col">
+      <div class="px-4 py-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-base">✍️</span>
+          <h3 id="sig-modal-title" class="text-sm font-bold text-white">手寫簽名板 — 三方簽章覆核</h3>
+        </div>
+        <button type="button" onclick="closeSignaturePadModal()" class="text-slate-400 hover:text-white text-xs px-2 py-1 rounded-lg hover:bg-slate-800">
+          ✕ 關閉
+        </button>
+      </div>
+
+      <div class="p-4 space-y-3 text-xs">
+        <!-- Role Selector Tabs -->
+        <div class="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px]">
+          <button type="button" id="sig-role-btn-inspector" onclick="switchSignatureRole('inspector')" class="py-1.5 px-1 rounded-lg font-bold bg-amber-500 text-slate-950 transition truncate">
+            1.查驗工程師
+          </button>
+          <button type="button" id="sig-role-btn-vendor" onclick="switchSignatureRole('vendor')" class="py-1.5 px-1 rounded-lg font-medium text-slate-400 hover:text-white transition truncate">
+            2.協力廠商簽認
+          </button>
+          <button type="button" id="sig-role-btn-manager" onclick="switchSignatureRole('manager')" class="py-1.5 px-1 rounded-lg font-medium text-slate-400 hover:text-white transition truncate">
+            3.工地主任覆核
+          </button>
+        </div>
+
+        <!-- Signer Name Input -->
+        <div class="flex items-center gap-2">
+          <label for="sig-signer-name-input" class="text-slate-300 font-semibold shrink-0">簽署人名稱：</label>
+          <input id="sig-signer-name-input" type="text" value="陳工程師" class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-white focus:border-amber-500 focus:outline-none" />
+          <button type="button" onclick="drawAutoHandwrittenSignature()" class="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 font-bold text-[11px] transition shrink-0">
+            ✨ 自動簽名
+          </button>
+        </div>
+
+        <!-- Interactive Handwriting Canvas -->
+        <div class="space-y-1">
+          <div class="flex items-center justify-between text-[11px] text-slate-400">
+            <span>👇 請在下方白色簽名欄內用手指或滑鼠手寫簽名：</span>
+            <button type="button" onclick="clearSignaturePadCanvas()" class="text-rose-400 hover:underline font-bold">🗑️ 清除重簽</button>
+          </div>
+          <div class="rounded-xl overflow-hidden border-2 border-slate-600 bg-[#f8fafc] shadow-inner relative">
+            <canvas id="sig-pad-canvas" width="440" height="150" class="w-full h-auto block cursor-crosshair touch-none"></canvas>
+          </div>
+        </div>
+
+        <!-- Red Stamp Toggle -->
+        <label class="flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800 cursor-pointer select-none">
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="sig-stamp-checkbox" checked onchange="redrawSignaturePadWithStamp()" class="rounded text-rose-600 focus:ring-0" />
+            <span class="text-slate-200 font-semibold">加蓋紅色「電子簽認」專用方章</span>
+          </div>
+          <span class="px-1.5 py-0.5 border border-rose-600 text-rose-500 text-[10px] font-extrabold rounded">電子簽認</span>
+        </label>
+
+        <!-- Action Buttons -->
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button type="button" onclick="clearAndRemoveRoleSignature()" class="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 border border-slate-700 font-bold text-xs transition">
+            🔄 設為「待簽認」
+          </button>
+          <button type="button" onclick="saveSignatureFromPad()" class="py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-extrabold text-xs shadow-lg transition">
+            ✅ 確認簽章並蓋章
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="live-camera-modal" class="fixed inset-0 z-[70] hidden bg-black no-print">
+    <video id="live-camera-video" autoplay muted playsinline class="w-full h-full object-cover"></video>
+    <div class="absolute top-3 left-3 right-3 flex justify-between items-center">
+      <span class="text-white text-xs font-bold bg-black/50 px-2 py-1 rounded-lg">後鏡頭拍照</span>
+      <button type="button" onclick="closeLiveCamera()" class="px-3 py-1.5 rounded-lg bg-white/20 text-white text-xs font-bold">取消</button>
+    </div>
+    <div class="absolute bottom-8 left-0 right-0 flex justify-center">
+      <button type="button" onclick="captureLiveCamera()" class="w-16 h-16 rounded-full bg-white border-4 border-amber-400 shadow-xl" title="快門"></button>
+    </div>
+  </div>
+
+  <div id="owner-login-modal" class="fixed inset-0 z-[60] hidden bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-3 no-print">
+    <div class="bg-slate-900 border border-amber-500/50 rounded-2xl max-w-sm w-full p-4 space-y-3 shadow-2xl">
+      <div class="text-sm font-bold text-white">甲方／工務登入</div>
+      <p class="text-[11px] text-slate-400 leading-relaxed">沒登入只能用「廠商回傳」拍照。開缺失單與查驗結案要工務密碼。</p>
+      <input id="owner-login-pin" type="password" inputmode="numeric" placeholder="工務密碼" autocomplete="off" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter'){event.preventDefault();submitOwnerLogin();}" />
+      <div class="grid grid-cols-2 gap-2">
+        <button type="button" onclick="closeOwnerLoginModal()" class="py-2.5 rounded-xl bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700">取消</button>
+        <button type="button" onclick="submitOwnerLogin()" class="py-2.5 rounded-xl bg-amber-500 text-slate-950 text-xs font-bold">登入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-xs w-full pointer-events-none px-3 no-print"></div>
+
+  <script>window.SITEQC_BUILD = '1111-VOID';</script>
+  <script src="./js/app.js?v=1111-VOID"></script>
+</body>
+</html>

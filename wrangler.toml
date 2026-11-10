@@ -1,0 +1,7 @@
+name = "calm-mountain-7cd0"
+compatibility_date = "2025-11-09"
+workers_dev = true
+
+[assets]
+directory = "./cloudflare-upload"
+not_found_handling = "single-page-application"
