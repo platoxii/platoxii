@@ -19,10 +19,16 @@
 
     // Draft signature state for Step 4 preview card
     let draftSignatures = {
-      inspector: { signed: true, name: '陳工程師', time: '2026-10-22 10:13', img: '' },
-      vendor: { signed: false, name: '宏昇水電工程', time: '', img: '' },
-      manager: { signed: false, name: '工地主任 / 所長', time: '', img: '' },
+      inspector: { signed: false, name: '陳工程師', time: '', img: '', handwritten: false },
+      vendor: { signed: false, name: '宏昇水電工程', time: '', img: '', handwritten: false },
+      manager: { signed: false, name: '工地主任 / 所長', time: '', img: '', handwritten: false },
       reportCode: '20261021-006-水電工程'
+    };
+
+    const SIG_GATE_MSG = {
+      inspector: '請先完成電子簽章，簽完才能派單（電子簽章即可）',
+      vendor: '請先完成電子簽章，簽完才能發布完工（電子簽章即可）',
+      manager: '請先完成電子簽章，簽完才能結案（電子簽章即可）'
     };
 
     let activeSigRole = 'inspector';
@@ -52,6 +58,7 @@
     let currentPwaCard = 1;
     let currentVendorCard = 1;
     let uiMode = 'vendor';
+    let currentMainTab = 'overview';
     let ownerPin = '2468';
     let pendingDeepLink = null;
     let linkUnlockedTab = '';
@@ -74,6 +81,203 @@
     function getImgSrc(id) {
       const el = document.getElementById(id);
       return el ? el.getAttribute('src') : '';
+    }
+
+    function countSigPadPoints() {
+      let n = 0;
+      sigPadStrokes.forEach(function(st) { n += (st && st.length) ? st.length : 0; });
+      n += currentSigStroke.length;
+      return n;
+    }
+
+    function roleSigFromTicket(d, role) {
+      const nested = d && d.signatures && d.signatures[role] && typeof d.signatures[role] === 'object'
+        ? d.signatures[role]
+        : {};
+      if (role === 'inspector') {
+        return {
+          signed: !!(d && (d.signInspector || nested.signed)),
+          handwritten: !!(d && (d.signInspectorHandwritten || nested.handwritten)),
+          img: (d && (d.signInspectorImg || nested.img)) || '',
+          name: (d && (d.signInspectorName || nested.name)) || '',
+          time: (d && (d.signInspectorTime || nested.time)) || ''
+        };
+      }
+      if (role === 'vendor') {
+        return {
+          signed: !!(d && (d.signVendor || nested.signed)),
+          handwritten: !!(d && (d.signVendorHandwritten || nested.handwritten)),
+          img: (d && (d.signVendorImg || nested.img)) || '',
+          name: (d && (d.signVendorName || nested.name)) || '',
+          time: (d && (d.signVendorTime || nested.time)) || ''
+        };
+      }
+      return {
+        signed: !!(d && (d.signManager || nested.signed)),
+        handwritten: !!(d && (d.signManagerHandwritten || nested.handwritten)),
+        img: (d && (d.signManagerImg || nested.img)) || '',
+        name: (d && (d.signManagerName || nested.name)) || '',
+        time: (d && (d.signManagerTime || nested.time)) || ''
+      };
+    }
+
+    function roleHasHandwritten(role, d) {
+      if (d) {
+        const s = roleSigFromTicket(d, role);
+        return !!(s.handwritten && s.img);
+      }
+      const draft = draftSignatures[role] || {};
+      return !!(draft.handwritten && draft.img);
+    }
+
+    function roleHasValidSignature(role, d) {
+      if (d) {
+        const s = roleSigFromTicket(d, role);
+        return !!(s.img || s.signed);
+      }
+      const draft = draftSignatures[role] || {};
+      return !!(draft.img || draft.signed);
+    }
+
+    function resolveSignerName(role, d) {
+      if (role === 'inspector') {
+        return (d && (d.signInspectorName || d.inspectorName)) || currentInspectorName || '陳工程師';
+      }
+      if (role === 'vendor') {
+        return (d && (d.signVendorName || d.vendor)) || (draftSignatures.vendor && draftSignatures.vendor.name) || '宏昇水電工程';
+      }
+      if (d && d.signManagerName) return d.signManagerName;
+      if (draftSignatures.manager && draftSignatures.manager.name && draftSignatures.manager.name !== '工地主任 / 所長') {
+        return draftSignatures.manager.name;
+      }
+      return '工地主任 / 所長';
+    }
+
+    function packSignaturesOnDefect(d) {
+      if (!d) return {};
+      if (!d.signatures || typeof d.signatures !== 'object') d.signatures = {};
+      d.signatures.inspector = {
+        name: d.signInspectorName || '',
+        time: d.signInspectorTime || '',
+        signed: !!d.signInspector,
+        handwritten: !!d.signInspectorHandwritten,
+        img: d.signInspectorImg || ''
+      };
+      d.signatures.vendor = {
+        name: d.signVendorName || '',
+        time: d.signVendorTime || '',
+        signed: !!d.signVendor,
+        handwritten: !!d.signVendorHandwritten,
+        img: d.signVendorImg || ''
+      };
+      d.signatures.manager = {
+        name: d.signManagerName || '',
+        time: d.signManagerTime || '',
+        signed: !!d.signManager,
+        handwritten: !!d.signManagerHandwritten,
+        img: d.signManagerImg || ''
+      };
+      return d.signatures;
+    }
+
+    function setCurrentMainTab(tabKey) {
+      if (tabKey) currentMainTab = tabKey;
+    }
+
+    function signatureStageForUi() {
+      if (uiMode === 'vendor') return 'vendor';
+      if (currentMainTab === 'admin') return 'close';
+      if (currentMainTab === 'vendor') return 'vendor';
+      return 'dispatch';
+    }
+
+    function allowedStampRole(stage) {
+      if (stage === 'vendor') return 'vendor';
+      if (stage === 'close') return 'manager';
+      if (stage === 'dispatch' || stage === 'dispatch-done') return 'inspector';
+      return '';
+    }
+
+    function canStampRole(role, stage) {
+      const allowed = allowedStampRole(stage || signatureStageForUi());
+      return !!role && role === allowed;
+    }
+
+    function resolveSigTicketId(role, ticketId) {
+      if (ticketId) return ticketId;
+      if (role === 'vendor') return currentVendorTicketId || null;
+      if (role === 'manager') return currentReviewTicketId || currentCaseId || null;
+      return currentCaseId || null;
+    }
+
+    function stampBlockedMessage(role, stage) {
+      const st = stage || signatureStageForUi();
+      if (st === 'dispatch' || st === 'dispatch-done') {
+        return '開單／派單只能簽第 1 格「查驗工程師」，不能寫入廠商或工地主任欄';
+      }
+      if (st === 'vendor') {
+        return '廠商只能簽第 2 格「協力廠商」，不能改查驗工程師或工地主任欄';
+      }
+      if (st === 'close') {
+        return '結案只能簽第 3 格「工地主任」，第 1、2 格已簽過不必重簽';
+      }
+      return '此欄目前不可簽署';
+    }
+
+    function persistTicketSignatures(d) {
+      if (!d || !d.id) return Promise.resolve();
+      const sig = packSignaturesOnDefect(d);
+      return updateDefectOnSupabase(d.id, {
+        signatures: sig,
+        inspector: d.inspectorName || null,
+        vendor: d.vendor || null
+      }).catch(function(err) {
+        console.error(err);
+        showToast('⚠️ 簽名已留在本機，雲端未寫入：' + (err.message || err), 'error');
+      });
+    }
+
+    function setSigGateHintVisible(role, show) {
+      const map = {
+        inspector: ['pwa-sig-gate-hint', 'step4-sig-gate-hint'],
+        vendor: ['vendor-sig-gate-hint'],
+        manager: ['admin-sig-gate-hint']
+      };
+      (map[role] || []).forEach(function(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (show) el.classList.remove('hidden');
+        else el.classList.add('hidden');
+      });
+      document.querySelectorAll('[data-sig-gate-role="' + role + '"]').forEach(function(el) {
+        if (show) el.classList.remove('hidden');
+        else el.classList.add('hidden');
+      });
+    }
+
+    function openRequiredSignaturePad(role) {
+      const stage = signatureStageForUi();
+      if (!canStampRole(role, stage)) {
+        showToast(stampBlockedMessage(role, stage), 'error');
+        setSigGateHintVisible(allowedStampRole(stage) || role, true);
+        return;
+      }
+      quickElectronicSign(role, resolveSigTicketId(role, null));
+    }
+
+    function requireRoleSignature(role, ticketId) {
+      const tid = resolveSigTicketId(role, ticketId);
+      const d = tid ? defects.find(function(x) { return x.id === tid; }) : null;
+      if (roleHasValidSignature(role, d)) {
+        setSigGateHintVisible(role, false);
+        return true;
+      }
+      const msg = SIG_GATE_MSG[role] || '請先完成電子簽章';
+      showToast(msg, 'error');
+      setSigGateHintVisible(role, true);
+      renderAllSignatureGrids();
+      openSignaturePadModal(role, tid);
+      return false;
     }
 
     function saveDefectsToStorage() {
@@ -174,14 +378,18 @@
     function setCloudSyncBadge(mode, extra) {
       const el = document.getElementById('cloud-sync-badge');
       if (!el) return;
+      const build = window.SITEQC_BUILD ? String(window.SITEQC_BUILD) : '';
+      el.title = build ? ('版本 ' + build) : '';
       if (mode === 'loading') {
-        el.textContent = '雲端載入中';
+        el.textContent = build ? ('雲端載入中 · ' + build) : '雲端載入中';
         el.className = 'px-1.5 py-0.2 text-[10px] font-bold rounded bg-slate-800 text-slate-300 border border-slate-700 shrink-0';
       } else if (mode === 'cloud') {
-        el.textContent = extra ? ('雲端 ' + extra + ' 筆 · PIC') : '已同步雲端 · PIC';
+        el.textContent = extra
+          ? ('雲端 ' + extra + ' 筆 · ' + (build || 'PIC'))
+          : (build ? ('已同步雲端 · ' + build) : '已同步雲端 · PIC');
         el.className = 'px-1.5 py-0.2 text-[10px] font-bold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0';
       } else {
-        el.textContent = '離線（本機備援）';
+        el.textContent = build ? ('離線 · ' + build) : '離線（本機備援）';
         el.className = 'px-1.5 py-0.2 text-[10px] font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0';
       }
     }
@@ -244,24 +452,71 @@
     }
 
     function vocabSuggestions(kind) {
-      const field = { buildings: 'building', floors: 'floor', areas: 'area', trades: 'trade' }[kind];
-      const fromTickets = defects.map(function(d) { return d[field]; });
-      return uniqueVocabList((projectVocab[kind] || []).concat(fromTickets));
+      return uniqueVocabList(projectVocab[kind] || []);
     }
 
-    function renderLocationDatalists() {
-      const map = {
-        buildings: 'list-building',
-        floors: 'list-floor',
-        areas: 'list-area',
-        trades: 'list-trade'
-      };
-      Object.keys(map).forEach(function(kind) {
-        const el = document.getElementById(map[kind]);
-        if (!el) return;
-        el.innerHTML = vocabSuggestions(kind).map(function(v) {
-          return '<option value="' + String(v).replace(/"/g, '&quot;') + '"></option>';
+    const PWA_VOCAB_FIELDS = {
+      buildings: { input: 'pwa-building', select: 'pwa-select-building', chips: 'pwa-chips-buildings' },
+      floors: { input: 'pwa-floor', select: 'pwa-select-floor', chips: 'pwa-chips-floors' },
+      areas: { input: 'pwa-area', select: 'pwa-select-area', chips: 'pwa-chips-areas' },
+      trades: { input: 'pwa-trade-custom', select: 'pwa-select-trade', chips: null }
+    };
+
+    function vocabEscape(s) {
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    }
+
+    function fillPwaLocationField(kind, value) {
+      const spec = PWA_VOCAB_FIELDS[kind];
+      if (!spec) return;
+      const val = String(value || '').trim();
+      if (!val) return;
+      const input = document.getElementById(spec.input);
+      if (input) input.value = val;
+      if (kind === 'trades') selectTrade(val);
+      renderLocationPickers();
+      updateLiveLinePreviewText();
+    }
+
+    function applyPwaVocabSelect(kind, selectEl) {
+      const v = selectEl ? String(selectEl.value || '').trim() : '';
+      if (!v) return;
+      fillPwaLocationField(kind, v);
+    }
+
+    function renderLocationPickers() {
+      Object.keys(PWA_VOCAB_FIELDS).forEach(function(kind) {
+        const spec = PWA_VOCAB_FIELDS[kind];
+        const list = vocabSuggestions(kind);
+        const input = document.getElementById(spec.input);
+        const current = input ? String(input.value || '').trim() : (kind === 'trades' ? String(currentTrade || '').trim() : '');
+        const sel = document.getElementById(spec.select);
+        if (sel) {
+          sel.innerHTML = '<option value="">▼ 選</option>' + list.map(function(v) {
+            return '<option value="' + vocabEscape(v) + '"' + (v === current ? ' selected' : '') + '>' + vocabEscape(v) + '</option>';
+          }).join('');
+          sel.onchange = function() {
+            applyPwaVocabSelect(kind, sel);
+          };
+        }
+        const box = document.getElementById(spec.chips);
+        if (!box) return;
+        if (!list.length) {
+          box.innerHTML = '<span class="text-[11px] text-slate-500">尚無常用項目，可直接打字。</span>';
+          return;
+        }
+        box.innerHTML = list.map(function(v) {
+          const on = v === current;
+          const cls = on
+            ? 'px-2 py-1 rounded-lg bg-amber-500/20 text-amber-200 text-[11px] border border-amber-500/50 font-semibold'
+            : 'px-2 py-1 rounded-lg bg-slate-800 hover:bg-amber-500/20 hover:text-amber-300 text-[11px] text-slate-200 border border-slate-700';
+          return '<button type="button" class="' + cls + '" data-kind="' + kind + '" data-vocab-pick="1" data-value="' + vocabEscape(v) + '">' + vocabEscape(v) + '</button>';
         }).join('');
+        box.querySelectorAll('[data-vocab-pick]').forEach(function(btn) {
+          btn.onclick = function() {
+            fillPwaLocationField(btn.getAttribute('data-kind'), btn.getAttribute('data-value'));
+          };
+        });
       });
     }
 
@@ -307,7 +562,7 @@
 
     function refreshVocabUi() {
       renderVocabChips();
-      renderLocationDatalists();
+      renderLocationPickers();
       renderTradeGrid();
     }
 
@@ -364,28 +619,7 @@
     }
 
     function rememberVocabFromTicket(d) {
-      if (!d) return;
-      const pairs = [
-        ['buildings', d.building],
-        ['floors', d.floor],
-        ['areas', d.area],
-        ['trades', d.trade]
-      ];
-      let dirty = false;
-      pairs.forEach(function(pair) {
-        const v = String(pair[1] || '').trim();
-        if (!v) return;
-        if (!projectVocab[pair[0]]) projectVocab[pair[0]] = [];
-        if (projectVocab[pair[0]].indexOf(v) === -1) {
-          projectVocab[pair[0]].push(v);
-          dirty = true;
-        }
-      });
-      if (dirty) {
-        saveProjectMetaLocal();
-        saveProjectMetaToCloud().catch(function() {});
-        refreshVocabUi();
-      }
+      // 派單不自動寫入常用清單；刪除後才不會從歷史單回流到下拉。
     }
 
     function initProjectMeta() {
@@ -395,7 +629,6 @@
       } catch (e) {}
 
       draftSignatures.inspector.name = currentInspectorName;
-      draftSignatures.inspector.img = generateStylizedSignatureDataUrl(currentInspectorName, true);
       syncProjectAndInspectorUI();
       refreshVocabUi();
     }
@@ -465,12 +698,10 @@
       saveProjectMetaToCloud().catch(function() {});
 
       draftSignatures.inspector.name = currentInspectorName;
-      draftSignatures.inspector.img = generateStylizedSignatureDataUrl(currentInspectorName, true);
       if (defects.length > 0 && defects[0].signInspector) {
         defects[0].projectName = currentProjectName;
         defects[0].inspectorName = currentInspectorName;
         defects[0].signInspectorName = currentInspectorName;
-        defects[0].signInspectorImg = draftSignatures.inspector.img;
         saveDefectsToStorage();
       }
       syncProjectAndInspectorUI();
@@ -484,6 +715,26 @@
         badge.textContent = '✅ 已更新專案與查驗人！';
       }
       showToast(`✅ 已更新專案為「${currentProjectName}」｜查驗人員：${currentInspectorName}`, 'success');
+    }
+
+    function saveCurrentSiteSettings() {
+      const pInput = document.getElementById('project-name-input');
+      const iInput = document.getElementById('inspector-name-input');
+      const pinInput = document.getElementById('owner-pin-input');
+      if (pInput && pInput.value.trim()) currentProjectName = pInput.value.trim();
+      if (iInput && iInput.value.trim()) currentInspectorName = iInput.value.trim();
+      if (pinInput) {
+        const pin = String(pinInput.value || '').trim();
+        if (pin.length >= 4) ownerPin = pin;
+      }
+      saveProjectMetaLocal();
+      syncProjectAndInspectorUI();
+      refreshVocabUi();
+      saveProjectMetaToCloud().then(function() {
+        showToast('☁️ 本工地設定已存到雲端', 'success');
+      }).catch(function(err) {
+        showToast('本機已存，雲端未寫入：' + (err.message || err), 'error');
+      });
     }
 
     function openAdminWithStatusFilter(statusKey) {
@@ -682,7 +933,7 @@
 
       function startDraw(e) {
         if (!basePhotoElement) {
-          openPhotoPicker('pwa', 'camera');
+          openPhotoPicker('pwa', 'gallery');
           return;
         }
         e.preventDefault();
@@ -919,7 +1170,7 @@
 
       function startDraw(e) {
         if (!vendorAfterPhotoElement) {
-          openPhotoPicker('vendor', 'camera');
+          openPhotoPicker('vendor', 'gallery');
           return;
         }
         e.preventDefault();
@@ -1061,6 +1312,18 @@
       return defects.find(function(d) { return d.id === currentCaseId; }) || null;
     }
 
+    function hydrateDraftInspectorFromTicket(d) {
+      if (!d) return;
+      const ins = roleSigFromTicket(d, 'inspector');
+      draftSignatures.inspector = {
+        signed: !!(ins.signed || ins.img),
+        handwritten: !!ins.handwritten,
+        name: ins.name || d.inspectorName || currentInspectorName,
+        time: ins.time || '',
+        img: ins.img || ''
+      };
+    }
+
     function engineerCaseActionLabel() {
       if (!currentCaseId) return '開新單';
       if (pwaPhotoDirty) return '重拍覆蓋';
@@ -1177,6 +1440,7 @@
       currentCaseId = d.id;
       pwaPhotoDirty = false;
       currentVendorTicketId = d.id;
+      hydrateDraftInspectorFromTicket(d);
       basePhotoElement = null;
       canvasMarks = [];
       redrawCanvas();
@@ -1188,6 +1452,9 @@
     function startNewEngineerCase(silent) {
       currentCaseId = null;
       pwaPhotoDirty = false;
+      draftSignatures.inspector = { signed: false, handwritten: false, name: currentInspectorName, time: '', img: '' };
+      draftSignatures.vendor = { signed: false, handwritten: false, name: draftSignatures.vendor.name || '宏昇水電工程', time: '', img: '' };
+      draftSignatures.manager = { signed: false, handwritten: false, name: '工地主任 / 所長', time: '', img: '' };
       clearSampleForm(true);
       goToPwaCard(1);
       refreshEngineerCaseUi();
@@ -1345,6 +1612,11 @@
           ? 'trade-btn px-2.5 py-2.5 rounded-xl text-xs font-semibold border transition flex items-center justify-center bg-amber-500/20 border-amber-500 text-amber-300'
           : 'trade-btn px-2.5 py-2.5 rounded-xl text-xs font-semibold border transition flex items-center justify-center bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700';
       });
+      const tradeSel = document.getElementById('pwa-select-trade');
+      if (tradeSel && tradeSel.value !== tradeName) {
+        const has = Array.prototype.some.call(tradeSel.options, function(opt) { return opt.value === tradeName; });
+        if (has) tradeSel.value = tradeName;
+      }
       updateLiveLinePreviewText();
     }
 
@@ -1356,10 +1628,118 @@
       showToast('🛠️ 已帶入改善要求：' + tagText, 'info');
     }
 
+    function isPlaceholderLocPart(s) {
+      const t = String(s || '').trim();
+      return !t || t === '未指定棟別' || t === '未指定樓層' || t === '未指定區域';
+    }
+
+    function formatTicketLocCaption(d) {
+      const b = String((d && d.building) || '').trim();
+      const f = String((d && d.floor) || '').trim();
+      const a = String((d && d.area) || '').trim();
+      const main = [b, f].filter(function(x) { return x && !isPlaceholderLocPart(x); }).join('-');
+      const area = (a && !isPlaceholderLocPart(a)) ? a : '';
+      if (main && area) return main + ' (' + area + ')';
+      if (main) return main;
+      if (area) return area;
+      return [b, f].filter(Boolean).join('-');
+    }
+
+    function formatStoredLocation(d) {
+      const b = String((d && d.building) || '').trim();
+      const f = String((d && d.floor) || '').trim();
+      const a = String((d && d.area) || '').trim();
+      const main = [b, f].filter(Boolean).join('-');
+      return (main + (a ? ' ' + a : '')).trim();
+    }
+
+    function snapshotDispatchSheet() {
+      function txt(id) {
+        const el = document.getElementById(id);
+        return el ? el.textContent : '';
+      }
+      const img = document.getElementById('line-card-img');
+      const grid = document.getElementById('step4-tri-signature-grid');
+      return {
+        img: img ? img.src : '',
+        trade: txt('line-card-trade'),
+        sla: txt('line-card-sla'),
+        cap: txt('line-card-photo-caption-main'),
+        capSub: txt('line-card-photo-caption-sub'),
+        note: txt('line-card-note'),
+        action: txt('line-card-action-note'),
+        id: txt('line-card-id'),
+        loc: txt('line-card-loc'),
+        vendor: txt('line-card-vendor'),
+        url: txt('line-card-url'),
+        reportCode: txt('line-card-report-code'),
+        sigHtml: grid ? grid.innerHTML : ''
+      };
+    }
+
+    function restoreDispatchSheet(bak) {
+      if (!bak) return;
+      function setTxt(id, val) {
+        const el = document.getElementById(id);
+        if (el && val != null) el.textContent = val;
+      }
+      const img = document.getElementById('line-card-img');
+      if (img && bak.img) img.src = bak.img;
+      setTxt('line-card-trade', bak.trade);
+      setTxt('line-card-sla', bak.sla);
+      setTxt('line-card-photo-caption-main', bak.cap);
+      setTxt('line-card-photo-caption-sub', bak.capSub);
+      setTxt('line-card-note', bak.note);
+      setTxt('line-card-action-note', bak.action);
+      setTxt('line-card-id', bak.id);
+      setTxt('line-card-loc', bak.loc);
+      setTxt('line-card-vendor', bak.vendor);
+      setTxt('line-card-url', bak.url);
+      setTxt('line-card-report-code', bak.reportCode);
+      const grid = document.getElementById('step4-tri-signature-grid');
+      if (grid && bak.sigHtml != null) grid.innerHTML = bak.sigHtml;
+    }
+
+    function fillDispatchSheetFromTicket(d, opts) {
+      if (!d) return;
+      opts = opts || {};
+      const kind = opts.captionKind === 'after' ? '完工回報' : '現場查驗';
+      const locShort = formatTicketLocCaption(d);
+      const proj = d.projectName || currentProjectName;
+      const insp = d.inspectorName || currentInspectorName;
+      const timeStr = d.createdAt || currentCaptureTimeStr;
+      const due = d.dueDate || '';
+      const trade = d.trade || '';
+      const vendor = d.vendor || '';
+      const locLine = [d.building, d.floor, d.area].filter(function(x) { return x && !isPlaceholderLocPart(x); }).join(' ・ ');
+      function setTxt(id, val) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+      }
+      const img = document.getElementById('line-card-img');
+      if (img && opts.photoDataUrl) img.src = opts.photoDataUrl;
+      setTxt('line-card-trade', trade);
+      setTxt('line-card-sla', due ? ('限期：' + due + ' 前') : '');
+      setTxt('line-card-photo-caption-main', '【' + kind + '】' + proj + (locShort ? (' ｜ ' + locShort) : ''));
+      setTxt('line-card-photo-caption-sub', '拍攝時間：' + timeStr + ' ｜ 查驗員：' + insp);
+      setTxt('line-card-note', d.description || '');
+      setTxt('line-card-action-note', d.actionNote || '');
+      setTxt('line-card-id', '#' + d.id);
+      setTxt('line-card-loc', locLine ? ('📍 ' + locLine) : '');
+      setTxt('line-card-vendor', vendor);
+      setTxt('line-card-url', '🔗 ' + vendorWorkUrl(d.id));
+      setTxt('line-card-report-code', '產出編號：' + (d.reportCode || d.id));
+      const grid = document.getElementById('step4-tri-signature-grid');
+      if (grid) {
+        const stage = opts.sigStage || (opts.captionKind === 'after' ? 'vendor' : 'dispatch-done');
+        grid.innerHTML = buildTriPartySignatureBoxesHtml(d, d.id, stage);
+      }
+    }
+
     function updateLiveLinePreviewText() {
-      const b = (document.getElementById('pwa-building').value || '').trim() || '未指定棟別';
-      const f = (document.getElementById('pwa-floor').value || '').trim() || '未指定樓層';
-      const a = (document.getElementById('pwa-area').value || '').trim() || '';
+      const b = (document.getElementById('pwa-building').value || '').trim();
+      const f = (document.getElementById('pwa-floor').value || '').trim();
+      const a = (document.getElementById('pwa-area').value || '').trim();
       const note = (document.getElementById('pwa-note').value || '').trim() || '樓層分電箱活線裸露未設臨時防護面板與感電警示貼紙';
       const actionNoteEl = document.getElementById('pwa-action-note');
       const actionNote = (actionNoteEl ? actionNoteEl.value.trim() : '') || '請立即加裝絕緣防護內蓋並張貼「送電中勿動」警示標誌';
@@ -1370,7 +1750,7 @@
       due.setDate(due.getDate() + slaDays);
       const dueStr = due.toISOString().slice(0, 10);
 
-      const locShort = a ? `${b}-${f} (${a})` : `${b}-${f}`;
+      const locShort = a ? `${b || '未指定棟別'}-${f || '未指定樓層'} (${a})` : `${b || '未指定棟別'}-${f || '未指定樓層'}`;
       const captionMain = `【現場查驗】${currentProjectName} ｜ ${locShort}`;
       const captionSub = `拍攝時間：${currentCaptureTimeStr} ｜ 查驗員：${currentInspectorName}`;
 
@@ -1437,9 +1817,12 @@
     async function renderInspectionReportDataUrl(d, photoDataUrl, afterDataUrl) {
       const photo = await loadCanvasImage(photoDataUrl || d.beforeImg);
       const after = await loadCanvasImage(afterDataUrl || d.afterImg);
-      const sigInsp = await loadCanvasImage(d.signInspectorImg);
-      const sigVendor = await loadCanvasImage(d.signVendorImg);
-      const sigManager = await loadCanvasImage(d.signManagerImg);
+      const insSig = roleSigFromTicket(d, 'inspector');
+      const venSig = roleSigFromTicket(d, 'vendor');
+      const mgrSig = roleSigFromTicket(d, 'manager');
+      const sigInsp = await loadCanvasImage(insSig.img);
+      const sigVendor = await loadCanvasImage(venSig.img);
+      const sigManager = await loadCanvasImage(mgrSig.img);
       const W = 900;
       const pad = 28;
       const inner = W - pad * 2;
@@ -1527,7 +1910,9 @@
       ctx.fillStyle = '#fbbf24';
       ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(`【現場查驗】${d.projectName || ''} ｜ ${d.building}-${d.floor}`, W / 2, y + photoH + 24);
+      const reportKind = after ? '完工回報' : '現場查驗';
+      const reportLoc = formatTicketLocCaption(d);
+      ctx.fillText(`【${reportKind}】${d.projectName || ''} ｜ ${reportLoc}`, W / 2, y + photoH + 24);
       ctx.fillStyle = '#cbd5e1';
       ctx.font = '13px "Noto Sans TC", sans-serif';
       ctx.fillText(`拍攝時間：${d.createdAt || ''} ｜ 查驗員：${d.inspectorName || ''}`, W / 2, y + photoH + 46);
@@ -1558,7 +1943,7 @@
       wrapCanvasText(ctx, d.description, boxW - 24).slice(0, 4).forEach((line, i) => {
         ctx.fillText(line, pad + 12, y + 46 + i * 18);
       });
-      wrapCanvasText(ctx, d.vendorNote || d.actionNote, boxW - 24).slice(0, 4).forEach((line, i) => {
+      wrapCanvasText(ctx, d.actionNote || d.vendorNote, boxW - 24).slice(0, 4).forEach((line, i) => {
         ctx.fillText(line, pad + boxW + 24, y + 46 + i * 18);
       });
       y += boxH + 14;
@@ -1574,9 +1959,9 @@
       ctx.fillText('三方簽章覆核', pad + 14, y + 22);
       const colW = (inner - 36) / 3;
       const boxes = [
-        { title: '查驗工程師簽章', name: d.signInspectorName, time: d.signInspectorTime, img: sigInsp, signed: d.signInspector },
-        { title: '協力廠商簽認', name: d.signVendorName, time: d.signVendorTime, img: sigVendor, signed: d.signVendor },
-        { title: '工地主任／主管覆核', name: d.signManagerName, time: d.signManagerTime, img: sigManager, signed: d.signManager }
+        { title: '查驗工程師簽章', name: insSig.name || d.inspectorName, time: insSig.time, img: sigInsp, signed: insSig.signed },
+        { title: '協力廠商簽認', name: venSig.name || d.vendor, time: venSig.time, img: sigVendor, signed: venSig.signed },
+        { title: '工地主任／主管覆核', name: mgrSig.name, time: mgrSig.time, img: sigManager, signed: mgrSig.signed }
       ];
       boxes.forEach((box, i) => {
         const bx = pad + 12 + i * (colW + 6);
@@ -1627,38 +2012,37 @@
       return canvas.toDataURL('image/jpeg', 0.9);
     }
 
-    async function captureFormSheetLikeBefore(photoDataUrl, actionText, captionKind) {
+    async function captureFormSheetLikeBefore(photoDataUrl, actionText, captionKind, ticket) {
       const viewPwa = document.getElementById('view-pwa');
       const step4 = document.getElementById('pwa-step-4');
       const img = document.getElementById('line-card-img');
-      const actionEl = document.getElementById('line-card-action-note');
-      const capMain = document.getElementById('line-card-photo-caption-main');
-      const bak = {
-        view: viewPwa && !viewPwa.classList.contains('hidden'),
-        step4: step4 && !step4.classList.contains('hidden'),
-        img: img ? img.src : '',
-        action: actionEl ? actionEl.textContent : '',
-        cap: capMain ? capMain.textContent : ''
-      };
+      const bakView = viewPwa && !viewPwa.classList.contains('hidden');
+      const bakStep4 = step4 && !step4.classList.contains('hidden');
+      const bakSheet = snapshotDispatchSheet();
       try {
         if (viewPwa) viewPwa.classList.remove('hidden');
         if (step4) step4.classList.remove('hidden');
-        if (img && photoDataUrl) {
-          img.src = photoDataUrl;
-          if (img.decode) await img.decode().catch(function() {});
+        if (ticket) {
+          fillDispatchSheetFromTicket(ticket, {
+            captionKind: captionKind || 'before',
+            photoDataUrl: photoDataUrl || ''
+          });
+        } else {
+          if (img && photoDataUrl) img.src = photoDataUrl;
+          const actionEl = document.getElementById('line-card-action-note');
+          if (actionEl && actionText) actionEl.textContent = actionText;
+          const capMain = document.getElementById('line-card-photo-caption-main');
+          if (capMain && captionKind === 'after') {
+            capMain.textContent = String(bakSheet.cap || capMain.textContent).replace('現場查驗', '完工回報');
+          }
         }
-        if (actionEl && actionText) actionEl.textContent = actionText;
-        if (capMain && captionKind === 'after') {
-          capMain.textContent = String(bak.cap || capMain.textContent).replace('現場查驗', '完工回報');
-        }
+        if (img && img.decode) await img.decode().catch(function() {});
         await new Promise(function(resolve) { setTimeout(resolve, 120); });
         return await captureDispatchSheetDataUrl();
       } finally {
-        if (img) img.src = bak.img;
-        if (actionEl) actionEl.textContent = bak.action;
-        if (capMain) capMain.textContent = bak.cap;
-        if (step4 && !bak.step4) step4.classList.add('hidden');
-        if (viewPwa && !bak.view) viewPwa.classList.add('hidden');
+        restoreDispatchSheet(bakSheet);
+        if (step4 && !bakStep4) step4.classList.add('hidden');
+        if (viewPwa && !bakView) viewPwa.classList.add('hidden');
       }
     }
 
@@ -1736,7 +2120,7 @@
     function parseDefectLocation(loc) {
       const s = String(loc || '').trim();
       const m = s.match(/^(.+?)-(\S+)\s*(.*)$/);
-      if (!m) return { building: s || 'A棟', floor: '', area: '' };
+      if (!m) return { building: s, floor: '', area: '' };
       return { building: m[1], floor: m[2], area: (m[3] || '').trim() };
     }
 
@@ -1818,18 +2202,21 @@
         trade: row.trade || '',
         vendor: row.vendor || '',
         description: row.issue_desc || '',
-        actionNote: row.solution_desc || '',
+        actionNote: sig.action_note || row.solution_desc || '',
         beforeImg: sig.pic_url || cloudBeforeUrl(row) || '',
         picImg: sig.pic_url || '',
         formImg: sig.form_url || '',
         afterImg: cloudAfterUrl(row) || null,
         afterPicImg: sig.after_pic_url || '',
         reportImg: sig.report_url || '',
-        vendorNote: '',
+        vendorNote: sig.vendor_note || '',
         auditNote: '',
-        signVendor: !!(sig.vendor && sig.vendor.signed),
-        signInspector: !!(sig.inspector && sig.inspector.signed),
-        signManager: !!(sig.manager && sig.manager.signed),
+        signVendor: !!(sig.vendor && (sig.vendor.signed || sig.vendor.handwritten || sig.vendor.img)),
+        signInspector: !!(sig.inspector && (sig.inspector.signed || sig.inspector.handwritten || sig.inspector.img)),
+        signManager: !!(sig.manager && (sig.manager.signed || sig.manager.handwritten || sig.manager.img)),
+        signInspectorHandwritten: !!(sig.inspector && sig.inspector.handwritten),
+        signVendorHandwritten: !!(sig.vendor && sig.vendor.handwritten),
+        signManagerHandwritten: !!(sig.manager && sig.manager.handwritten),
         signInspectorName: (sig.inspector && sig.inspector.name) || row.inspector || currentInspectorName,
         signInspectorTime: (sig.inspector && sig.inspector.time) || '',
         signInspectorImg: (sig.inspector && sig.inspector.img) || '',
@@ -1875,7 +2262,7 @@
       const base = {
         id: d.id,
         project_name: d.projectName,
-        location: `${d.building}-${d.floor} ${d.area}`,
+        location: formatStoredLocation(d),
         trade: d.trade,
         vendor: d.vendor,
         issue_desc: d.description,
@@ -1884,14 +2271,13 @@
         status: d.status || 'OPEN',
         inspector: d.inspectorName,
         due_date: d.dueDate || null,
-        signatures: {
-          inspector: { name: d.signInspectorName, time: d.signInspectorTime, signed: d.signInspector },
-          vendor: { name: d.signVendorName, time: d.signVendorTime, signed: d.signVendor },
-          manager: { name: d.signManagerName, time: d.signManagerTime, signed: d.signManager },
+        signatures: Object.assign({}, packSignaturesOnDefect(d), {
           report_url: null,
           form_url: d.formImg || publicReportUrl || null,
-          pic_url: publicPhotoUrl || null
-        }
+          pic_url: publicPhotoUrl || null,
+          action_note: d.actionNote || '',
+          issue_desc: d.description || ''
+        })
       };
       const attempts = [
         { ...base, before_img: publicPhotoUrl || null, after_img: null, photo_before: publicPhotoUrl || null, photo_after: null },
@@ -1964,6 +2350,7 @@
     }
 
     async function submitPwaDefect() {
+      if (!requireRoleSignature('inspector', currentCaseId || null)) return;
       const canvas = document.getElementById('defect-canvas');
       const editing = currentCaseId ? defects.find(function(x) { return x.id === currentCaseId; }) : null;
       if (!editing && (!basePhotoElement || !canvas)) {
@@ -1979,16 +2366,28 @@
       const replacingPhoto = !!(editing && pwaPhotoDirty && basePhotoElement);
       const annotatedDataUrl = (basePhotoElement && canvas) ? canvas.toDataURL('image/jpeg', 0.78) : '';
 
-      const b = (document.getElementById('pwa-building').value || '').trim() || '未指定棟別';
-      const f = (document.getElementById('pwa-floor').value || '').trim() || '未指定樓層';
-      const a = (document.getElementById('pwa-area').value || '').trim() || '未指定區域';
-      const note = (document.getElementById('pwa-note').value || '').trim() || '樓層分電箱活線裸露未設臨時防護面板與感電警示貼紙';
+      let b = (document.getElementById('pwa-building').value || '').trim();
+      let f = (document.getElementById('pwa-floor').value || '').trim();
+      let a = (document.getElementById('pwa-area').value || '').trim();
+      let note = (document.getElementById('pwa-note').value || '').trim();
       const actEl = document.getElementById('pwa-action-note');
-      const actionNote = (actEl ? actEl.value.trim() : '') || '請立即加裝絕緣防護內蓋並張貼「送電中勿動」警示標誌';
-      const vendor = (document.getElementById('pwa-vendor').value || '').trim() || '宏昇水電工程';
+      let actionNote = actEl ? actEl.value.trim() : '';
+      let vendor = (document.getElementById('pwa-vendor').value || '').trim();
       const slaDays = parseInt(document.getElementById('pwa-sla').value || '3', 10);
       const typedTrade = (document.getElementById('pwa-trade-custom') && document.getElementById('pwa-trade-custom').value || '').trim();
       if (typedTrade) currentTrade = typedTrade;
+      if (editing) {
+        if (!b) b = editing.building || '';
+        if (!f) f = editing.floor || '';
+        if (!a) a = editing.area || '';
+        if (!note) note = editing.description || '';
+        if (!actionNote) actionNote = editing.actionNote || '';
+        if (!vendor) vendor = editing.vendor || '';
+        if (!typedTrade && editing.trade) currentTrade = editing.trade;
+      }
+      if (!note) note = '樓層分電箱活線裸露未設臨時防護面板與感電警示貼紙';
+      if (!actionNote) actionNote = '請立即加裝絕緣防護內蓋並張貼「送電中勿動」警示標誌';
+      if (!vendor) vendor = '宏昇水電工程';
 
       const due = new Date();
       due.setDate(due.getDate() + slaDays);
@@ -2001,11 +2400,9 @@
 
       draftSignatures.reportCode = newId;
       draftSignatures.inspector.name = currentInspectorName;
-      draftSignatures.inspector.time = nowStr;
-      if (!draftSignatures.inspector.img) {
-        draftSignatures.inspector.img = generateStylizedSignatureDataUrl(currentInspectorName, true);
+      if (draftSignatures.inspector.signed || draftSignatures.inspector.img) {
+        draftSignatures.inspector.time = draftSignatures.inspector.time || nowStr;
       }
-      draftSignatures.vendor.name = vendor;
 
       const newDefect = editing || {
         id: newId,
@@ -2029,30 +2426,42 @@
       newDefect.description = note;
       newDefect.actionNote = actionNote;
       if (annotatedDataUrl) newDefect.beforeImg = annotatedDataUrl;
-      newDefect.signVendor = draftSignatures.vendor.signed;
-      newDefect.signInspector = true;
-      newDefect.signManager = draftSignatures.manager.signed;
-      newDefect.signInspectorName = currentInspectorName;
-      newDefect.signInspectorTime = nowStr;
-      newDefect.signInspectorImg = draftSignatures.inspector.img;
-      newDefect.signVendorName = vendor;
-      newDefect.signVendorTime = draftSignatures.vendor.time || '';
-      newDefect.signVendorImg = draftSignatures.vendor.img || '';
-      newDefect.signManagerName = draftSignatures.manager.name || '工地主任 / 所長';
-      newDefect.signManagerTime = draftSignatures.manager.time || '';
-      newDefect.signManagerImg = draftSignatures.manager.img || '';
+      newDefect.signInspector = !!(draftSignatures.inspector.signed || draftSignatures.inspector.img);
+      newDefect.signInspectorHandwritten = !!draftSignatures.inspector.handwritten;
+      newDefect.signInspectorName = draftSignatures.inspector.name || currentInspectorName;
+      newDefect.signInspectorTime = draftSignatures.inspector.time || (newDefect.signInspector ? nowStr : '');
+      newDefect.signInspectorImg = draftSignatures.inspector.img || '';
+      if (!editing) {
+        newDefect.signVendor = false;
+        newDefect.signVendorHandwritten = false;
+        newDefect.signVendorName = vendor;
+        newDefect.signVendorTime = '';
+        newDefect.signVendorImg = '';
+        newDefect.signManager = false;
+        newDefect.signManagerHandwritten = false;
+        newDefect.signManagerName = '';
+        newDefect.signManagerTime = '';
+        newDefect.signManagerImg = '';
+      } else {
+        if (!newDefect.signVendorName) newDefect.signVendorName = vendor;
+      }
+      packSignaturesOnDefect(newDefect);
       newDefect.dueDate = dueStr;
       newDefect.magicToken = token;
 
-      document.getElementById('line-card-id').textContent = '#' + newId;
-      if (annotatedDataUrl) document.getElementById('line-card-img').src = annotatedDataUrl;
-      document.getElementById('line-card-url').textContent = '🔗 ' + vendorWorkUrl(newId);
+      currentCaseId = newId;
+      currentVendorTicketId = newId;
+      if (!editing) defects.unshift(newDefect);
+      saveDefectsToStorage();
+
+      fillDispatchSheetFromTicket(newDefect, {
+        captionKind: 'before',
+        photoDataUrl: annotatedDataUrl || newDefect.beforeImg || '',
+        sigStage: 'dispatch-done'
+      });
       document.getElementById('line-sim-timestamp').textContent = editing
         ? ('✅ 已覆蓋雲端照片 #' + newId)
         : ('✅ 已建立派單 #' + newId);
-      const reportCodeEl = document.getElementById('line-card-report-code');
-      if (reportCodeEl) reportCodeEl.textContent = '產出編號：' + newId;
-      updateLiveLinePreviewText();
       goToPwaCard(4);
       if (!editing) {
         sendToLine(buildDispatchLineText(newDefect));
@@ -2091,9 +2500,7 @@
         }
       }
 
-      if (!editing) defects.unshift(newDefect);
       saveDefectsToStorage();
-      currentVendorTicketId = newId;
 
       try {
         if (editing) {
@@ -2101,9 +2508,9 @@
           sig.form_url = publicFormUrl || newDefect.formImg || null;
           sig.pic_url = publicPicUrl || null;
           sig.report_url = newDefect.reportImg || null;
-          sig.inspector = { name: newDefect.signInspectorName, time: newDefect.signInspectorTime, signed: newDefect.signInspector };
+          Object.assign(sig, packSignaturesOnDefect(newDefect));
           await updateDefectOnSupabase(newId, {
-            location: newDefect.building + '-' + newDefect.floor + ' ' + newDefect.area,
+            location: formatStoredLocation(newDefect),
             trade: newDefect.trade,
             vendor: newDefect.vendor,
             issue_desc: newDefect.description,
@@ -2222,7 +2629,8 @@
     }
 
     async function sendDispatchToLine(opts) {
-      const d = currentCaseDefect() || defects.find(function(x) { return x.id === currentVendorTicketId; }) || defects[0];
+      const d = currentCaseDefect();
+      if (!requireRoleSignature('inspector', d ? d.id : (currentCaseId || null))) return;
       sendToLine(buildDispatchLineText(d));
     }
 
@@ -2344,6 +2752,7 @@
           el.className = 'py-1 px-1 rounded-lg font-medium text-slate-400 bg-slate-950';
         }
       });
+      renderAllSignatureGrids();
     }
 
     function vendorMarkInProgress() {
@@ -2434,6 +2843,7 @@
         showToast('請先拍完工照，畫紅圈後再按確認完工', 'error');
         return;
       }
+      if (!requireRoleSignature('vendor', d.id)) return;
       vendorAfterPhotoDirty = false;
 
       const noteVal = (document.getElementById('vendor-reply-note') && document.getElementById('vendor-reply-note').value || '').trim()
@@ -2458,9 +2868,13 @@
             d.afterImg = afterPicUrl;
             d.afterPicImg = afterPicUrl;
           }
-          const afterFormDataUrl = await captureFormSheetLikeBefore(localAfter, d.vendorNote || d.actionNote, 'after');
-          const afterFormUrl = await uploadDefectPhotoToSupabase(storageObjectName(d.id, '_after.jpg', d.trade), afterFormDataUrl);
           if (!d.signatures) d.signatures = {};
+          packSignaturesOnDefect(d);
+          if (d.actionNote && d.actionNote !== noteVal) d.signatures.action_note = d.signatures.action_note || d.actionNote;
+          if (d.description) d.signatures.issue_desc = d.signatures.issue_desc || d.description;
+          d.signatures.vendor_note = noteVal;
+          const afterFormDataUrl = await captureFormSheetLikeBefore(localAfter, d.actionNote, 'after', d);
+          const afterFormUrl = await uploadDefectPhotoToSupabase(storageObjectName(d.id, '_after.jpg', d.trade), afterFormDataUrl);
           d.signatures.after_pic_url = afterPicUrl || null;
           d.signatures.after_form_url = afterFormUrl || null;
           d.signatures.report_url = null;
@@ -2468,7 +2882,7 @@
             after_img: d.afterImg || null,
             photo_after: d.afterImg || null,
             status: 'PENDING_REVIEW',
-            solution_desc: d.vendorNote || d.actionNote || null,
+            solution_desc: d.signatures.action_note || d.actionNote || null,
             signatures: d.signatures
           });
           saveDefectsToStorage();
@@ -2494,7 +2908,7 @@
         '已改善完成，請工務複驗。',
         '👉 工務請點這連結直接進「3.查驗結案」確認：',
         adminWorkUrl(d.id),
-        `📍 位置：${d.building}・${d.floor}・${d.area}`,
+        `📍 位置：${formatTicketLocCaption(d) || [d.building, d.floor, d.area].filter(Boolean).join('・')}`,
         `👷 工種：${d.trade}（${d.vendor}）`,
         `📝 原始缺失：${d.description}`,
         `🛠️ 完工說明：${d.vendorNote || '已改善完成，請工務複驗'}`
@@ -2629,6 +3043,7 @@
     async function sendCompletionToLine() {
       const ta = document.getElementById('line-report-textarea');
       const d = lineReportTicket || currentCaseDefect() || defects.find(function(x) { return x.id === currentVendorTicketId; });
+      if (!requireRoleSignature('vendor', d ? d.id : currentVendorTicketId)) return;
       let text = (ta && ta.value && ta.value.trim()) ? ta.value : buildCompletionLineText(d);
       sendToLine(text);
     }
@@ -2744,10 +3159,10 @@
       const isClosed = d.status === 'CLOSED';
       const isVoided = d.status === 'VOIDED';
 
-      const locBadge = `${d.building}-${d.floor}`;
+      const locBadge = formatTicketLocCaption(d);
       const timeStr = d.createdAt || currentCaptureTimeStr;
       const actText = d.actionNote || '請立即加裝絕緣防護內蓋並張貼「送電中勿動」警示標誌';
-      const triBoxesHtml = buildTriPartySignatureBoxesHtml(d, d.id);
+      const triBoxesHtml = buildTriPartySignatureBoxesHtml(d, d.id, 'close');
 
       singleDeckEl.innerHTML = `
         <div class="page-card space-y-2.5 flex-1 flex flex-col justify-between">
@@ -2802,21 +3217,27 @@
               </div>
             </div>
 
-            <!-- CIRCLED PART 2: 三方簽章覆核 (點選任一方格即可開啟「手寫簽名板」進行電子簽名) -->
+            <!-- CIRCLED PART 2: 三方簽章覆核（點第 3 格即可電子簽章；手寫選用） -->
             <div class="rounded-2xl bg-[#f1f5f9] border border-slate-300 p-3 space-y-2 text-slate-900 shadow">
               <div class="flex flex-wrap items-center justify-between gap-1">
                 <div class="text-[11px] sm:text-xs font-extrabold text-slate-700">
-                  三方簽章覆核 (點選任一方格即可開啟「手寫簽名板」進行電子簽名)
+                  三方簽章覆核（點第 3 格工地主任即可電子簽章）
                 </div>
-                <button type="button" onclick="openSignaturePadModal('inspector', '${d.id}')" class="px-2.5 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[11px] font-extrabold transition">
-                  ✍️ 點擊方格立即手寫簽核
-                </button>
+                <div class="flex items-center gap-1">
+                  <button type="button" onclick="quickElectronicSign('manager', '${d.id}')" class="px-2.5 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[11px] font-extrabold transition">
+                    ✨ 工地主任電子簽章
+                  </button>
+                  <button type="button" onclick="openSignaturePadModal('manager', '${d.id}')" class="px-2.5 py-0.5 rounded-full bg-white hover:bg-slate-100 text-slate-600 border border-slate-300 text-[11px] font-bold transition">
+                    選用手寫
+                  </button>
+                </div>
               </div>
 
               <!-- 3 Interactive Electronic Signature Cards -->
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 ${triBoxesHtml}
               </div>
+              <p class="admin-sig-gate-hint text-[11px] text-center text-rose-600 font-bold ${d.signManager ? 'hidden' : ''}" data-sig-gate-role="manager" id="admin-sig-gate-hint">請先完成電子簽章，簽完才能結案</p>
 
               <div class="pt-1 border-t border-slate-200 flex flex-wrap items-center justify-between gap-1 text-[10px] text-slate-500 font-medium">
                 <span>由「工地缺失改善管理系統」自動排版生成 (適配手機 LINE 閱讀)</span>
@@ -2892,31 +3313,25 @@
       } else {
         d.auditNote = '現場查驗核對無誤，三方簽章准予結案。';
       }
+      if (!requireRoleSignature('manager', d.id)) return;
       const nowTime = new Date().toISOString().slice(0, 16).replace('T', ' ');
       d.projectName = currentProjectName;
-      d.inspectorName = currentInspectorName;
-      d.signVendor = true;
-      d.signInspector = true;
       d.signManager = true;
-      d.signInspectorName = currentInspectorName;
-      d.signInspectorTime = d.signInspectorTime || nowTime;
-      d.signInspectorImg = d.signInspectorImg || generateStylizedSignatureDataUrl(currentInspectorName, true);
-      d.signVendorName = d.vendor || '宏昇水電工程';
-      d.signVendorTime = d.signVendorTime || nowTime;
-      d.signVendorImg = d.signVendorImg || generateStylizedSignatureDataUrl(d.vendor || '協力廠商', true);
-      d.signManagerName = d.signManagerName || '工地主任 / 所長';
-      d.signManagerTime = nowTime;
-      d.signManagerImg = d.signManagerImg || generateStylizedSignatureDataUrl('工地主任', true);
+      d.signManagerName = d.signManagerName || resolveSignerName('manager', d);
+      d.signManagerTime = d.signManagerTime || nowTime;
       d.status = 'CLOSED';
       d.closedAt = nowTime;
+      packSignaturesOnDefect(d);
       saveDefectsToStorage();
       renderAdminBoard();
       populateVendorDropdown();
       showToast(`✅ #${d.id} 結案中，正在合成 _report.jpg…`, 'success');
       archiveClosedReport(d).then(function(reportUrl) {
+        const sig = Object.assign({}, packSignaturesOnDefect(d), { report_url: reportUrl || null });
+        d.signatures = sig;
         return updateDefectOnSupabase(d.id, {
           status: 'CLOSED',
-          signatures: Object.assign({}, d.signatures || {}, { report_url: reportUrl || null })
+          signatures: sig
         });
       }).then(function() {
         saveDefectsToStorage();
@@ -2985,7 +3400,7 @@
         '👉 點這連結直接看這張結案單：',
         adminWorkUrl(d.id),
         `🏗️ 專案：${d.projectName || currentProjectName}`,
-        `📍 位置：${d.building}・${d.floor}・${d.area}`,
+        `📍 位置：${formatTicketLocCaption(d) || [d.building, d.floor, d.area].filter(Boolean).join('・')}`,
         `👷 責任工種：${d.trade}（${d.vendor}）`,
         `🔍 查驗人員：${d.inspectorName || currentInspectorName}`,
         `📌 查驗結果：【${stLabel}】${d.auditNote || '現場核對無誤，三方簽章結案。'}`
@@ -3055,6 +3470,7 @@
     function approveReviewTicket() {
       const d = defects.find(item => item.id === currentReviewTicketId);
       if (!d) return;
+      if (!requireRoleSignature('manager', d.id)) return;
       d.status = 'CLOSED';
       saveDefectsToStorage();
       closeReviewModal();
@@ -3117,7 +3533,9 @@
       const sInsp = document.getElementById('pdf-sign-inspector');
       const proj = (d && d.projectName) ? d.projectName : currentProjectName;
       const insp = (d && d.inspectorName) ? d.inspectorName : currentInspectorName;
-      const locShort = d ? `${d.building}-${d.floor}` : ((document.getElementById('pwa-building').value || '未指定棟別') + '-' + (document.getElementById('pwa-floor').value || '未指定樓層'));
+      const locShort = d
+        ? formatTicketLocCaption(d)
+        : (((document.getElementById('pwa-building').value || '').trim()) + '-' + ((document.getElementById('pwa-floor').value || '').trim())).replace(/^-|-$/g, '');
       const timeStr = (d && d.createdAt) ? d.createdAt : currentCaptureTimeStr;
 
       if (pEl) pEl.textContent = '專案：' + proj;
@@ -3141,7 +3559,7 @@
       }
       const pdfGrid = document.getElementById('pdf-tri-signature-grid');
       if (pdfGrid) {
-        pdfGrid.innerHTML = buildTriPartySignatureBoxesHtml(d, d ? d.id : null);
+        pdfGrid.innerHTML = buildTriPartySignatureBoxesHtml(d, d ? d.id : null, 'view');
       }
       document.getElementById('single-pdf-modal').classList.remove('hidden');
     }
@@ -3425,6 +3843,7 @@
         showToast('沒有權限。請在「廠商回傳」處理這張缺失。', 'error');
         tabKey = 'vendor';
       }
+      setCurrentMainTab(tabKey);
       ['overview', 'pwa', 'vendor', 'admin', 'arch', 'settings', 'role'].forEach(k => {
         const view = document.getElementById('view-' + k);
         const btn = document.getElementById('tab-btn-' + k);
@@ -3476,9 +3895,16 @@
           }
         }
       });
-      if (stepNum === 4) {
-        syncAnnotatedPreviewToLineCard();
-        updateLiveLinePreviewText();
+      if (stepNum === 2 || stepNum === 3) {
+        renderLocationPickers();
+        if (stepNum === 3) renderTradeGrid();
+      }
+      if (stepNum === 3 || stepNum === 4) {
+        if (stepNum === 4) {
+          syncAnnotatedPreviewToLineCard();
+          updateLiveLinePreviewText();
+        }
+        renderAllSignatureGrids();
       }
       updateHeaderCaseLine();
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -3502,6 +3928,7 @@
           }
         }
       });
+      if (stepNum === 2) renderAllSignatureGrids();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -3722,90 +4149,142 @@
     // ====================================================
     // 8. Tri-Party Electronic Signature Boxes & Handwritten Signature Pad
     // ====================================================
-    function buildTriPartySignatureBoxesHtml(d, ticketId) {
+    function buildTriPartySignatureBoxesHtml(d, ticketId, stage) {
       const tidArg = ticketId ? `'${ticketId}'` : 'null';
+      const st = stage || signatureStageForUi();
+      const canInsp = canStampRole('inspector', st);
+      const canVend = canStampRole('vendor', st);
+      const canMgr = canStampRole('manager', st);
 
-      const inspSigned = d ? Boolean(d.signInspector || d.signInspectorImg) : draftSignatures.inspector.signed;
-      const inspName = d ? (d.signInspectorName || d.inspectorName || currentInspectorName) : (draftSignatures.inspector.name || currentInspectorName);
-      const inspTime = d ? (d.signInspectorTime || d.createdAt || '2026-10-22 10:13') : (draftSignatures.inspector.time || '2026-10-22 10:13');
-      const inspImg = d ? (d.signInspectorImg || generateStylizedSignatureDataUrl(inspName, true)) : (draftSignatures.inspector.img || generateStylizedSignatureDataUrl(inspName, true));
+      const insp = d ? roleSigFromTicket(d, 'inspector') : (draftSignatures.inspector || {});
+      const vend = d ? roleSigFromTicket(d, 'vendor') : { signed: false, name: (d && d.vendor) || '宏昇水電工程', time: '', img: '' };
+      const mgr = d ? roleSigFromTicket(d, 'manager') : { signed: false, name: '工地主任 / 所長', time: '', img: '' };
 
-      const vendSigned = d ? Boolean(d.signVendor && d.signVendorImg) : Boolean(draftSignatures.vendor.signed && draftSignatures.vendor.img);
-      const vendName = d ? (d.signVendorName || d.vendor || '宏昇水電工程') : (draftSignatures.vendor.name || '宏昇水電工程');
-      const vendTime = d ? (d.signVendorTime || '') : (draftSignatures.vendor.time || '');
-      const vendImg = d ? (d.signVendorImg || '') : (draftSignatures.vendor.img || '');
+      const inspOk = roleHasValidSignature('inspector', d || null);
+      const vendOk = !!(d && roleHasValidSignature('vendor', d));
+      const mgrOk = !!(d && roleHasValidSignature('manager', d));
 
-      const mgrSigned = d ? Boolean((d.signManager && d.signManagerImg) || d.status === 'CLOSED') : Boolean(draftSignatures.manager.signed && draftSignatures.manager.img);
-      const mgrName = d ? (d.signManagerName || '工地主任 / 所長') : (draftSignatures.manager.name || '工地主任 / 所長');
-      const mgrTime = d ? (d.signManagerTime || d.closedAt || '') : (draftSignatures.manager.time || '');
-      const mgrImg = d ? (d.signManagerImg || (d.status === 'CLOSED' ? generateStylizedSignatureDataUrl('工地主任', true) : '')) : (draftSignatures.manager.img || '');
+      const inspName = insp.name || (d && d.inspectorName) || currentInspectorName;
+      const vendName = vend.name || (d && d.vendor) || '宏昇水電工程';
+      const mgrName = mgr.name || '工地主任 / 所長';
+      const inspImg = insp.img || '';
+      const vendImg = vend.img || '';
+      const mgrImg = mgr.img || '';
+      const inspSigned = !!(inspImg && (insp.signed || inspOk));
+      const vendSigned = !!(vendImg && (vend.signed || vendOk));
+      const mgrSigned = !!(mgrImg && (mgr.signed || mgrOk));
+
+      const inspNeed = canInsp && !inspOk;
+      const vendNeed = canVend && !vendOk;
+      const mgrNeed = canMgr && !mgrOk;
+      const boxCls = function(need, clickable) {
+        if (!clickable) {
+          return 'rounded-xl bg-slate-50 border border-slate-300 p-2.5 flex flex-col justify-between';
+        }
+        return need
+          ? 'cursor-pointer rounded-xl bg-white hover:bg-rose-50/70 border-2 border-rose-400 p-2.5 flex flex-col justify-between transition shadow-sm'
+          : 'cursor-pointer rounded-xl bg-white hover:bg-amber-50/40 border border-slate-300 hover:border-amber-500 p-2.5 flex flex-col justify-between transition shadow-sm';
+      };
+      const blockedClick = function(role) {
+        return `showToast('${stampBlockedMessage(role, st)}','error');`;
+      };
+      const inspClick = canInsp ? `quickElectronicSign('inspector', ${tidArg})` : blockedClick('inspector');
+      const vendClick = canVend ? `quickElectronicSign('vendor', ${tidArg})` : blockedClick('vendor');
+      const mgrClick = canMgr ? `quickElectronicSign('manager', ${tidArg})` : blockedClick('manager');
+      const inspEmpty = canInsp ? '請點此完成電子簽章' : '待查驗工程師於開單時簽章';
+      const vendEmpty = canVend ? '請點此完成電子簽章後才能完工' : '待協力廠商完工時簽認';
+      const mgrEmpty = canMgr ? '請點此完成電子簽章後才能結案' : '待工地主任結案時簽章';
 
       return `
         <!-- Box 1: 查驗工程師簽章 -->
-        <div onclick="openSignaturePadModal('inspector', ${tidArg})" class="cursor-pointer rounded-xl bg-white hover:bg-amber-50/40 border border-slate-300 hover:border-amber-500 p-2.5 flex flex-col justify-between transition shadow-sm">
+        <div onclick="${inspClick}" class="${boxCls(inspNeed, canInsp)}">
           <div class="flex items-center justify-between text-[11px]">
             <span class="font-extrabold text-slate-800">查驗工程師簽章：</span>
-            <span class="text-amber-700 font-bold">✍️ 簽名/重簽</span>
+            <span class="${inspOk ? 'text-emerald-700' : (canInsp ? 'text-rose-600' : 'text-slate-400')} font-bold">${inspOk ? '✅ 已簽章' : (canInsp ? '✨ 必簽' : '開單欄')}</span>
           </div>
           <div class="h-14 my-1 flex items-center justify-center overflow-hidden">
             ${inspSigned && inspImg
               ? `<img src="${inspImg}" alt="查驗工程師簽章" class="max-h-14 w-auto object-contain" />`
-              : `<span class="text-xs text-slate-400 font-semibold">(點擊工程師簽章)</span>`
+              : `<span class="text-xs ${canInsp ? 'text-rose-500' : 'text-slate-400'} font-semibold">${inspEmpty}</span>`
             }
           </div>
           <div class="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100">
             <span class="font-extrabold text-slate-900 truncate">${inspName}</span>
-            <span class="mono text-[10px] text-slate-500">${inspSigned ? inspTime : '(待簽章)'}</span>
+            <span class="mono text-[10px] text-slate-500">${inspOk ? (insp.time || '已簽章') : '(待電子簽章)'}</span>
           </div>
+          <p data-sig-gate-role="inspector" class="${inspNeed ? '' : 'hidden '}mt-1 text-[10px] font-bold text-rose-600">請先完成電子簽章，簽完才能派單</p>
         </div>
 
         <!-- Box 2: 協力廠商簽認 -->
-        <div onclick="openSignaturePadModal('vendor', ${tidArg})" class="cursor-pointer rounded-xl bg-white hover:bg-amber-50/40 border border-slate-300 hover:border-amber-500 p-2.5 flex flex-col justify-between transition shadow-sm">
+        <div onclick="${vendClick}" class="${boxCls(vendNeed, canVend)}">
           <div class="flex items-center justify-between text-[11px]">
             <span class="font-extrabold text-slate-800">協力廠商簽認：</span>
-            <span class="text-amber-700 font-bold">✍️ 簽名/重簽</span>
+            <span class="${vendOk ? 'text-emerald-700' : (canVend ? 'text-rose-600' : 'text-slate-400')} font-bold">${vendOk ? '✅ 已簽章' : (canVend ? '✨ 必簽' : '廠商欄')}</span>
           </div>
           <div class="h-14 my-1 flex items-center justify-center overflow-hidden">
             ${vendSigned && vendImg
               ? `<img src="${vendImg}" alt="協力廠商簽認" class="max-h-14 w-auto object-contain" />`
-              : `<span class="text-xs text-slate-400 font-semibold">(點擊廠商簽章)</span>`
+              : `<span class="text-xs ${canVend ? 'text-rose-500' : 'text-slate-400'} font-semibold">${vendEmpty}</span>`
             }
           </div>
           <div class="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100">
             <span class="font-extrabold text-slate-900 truncate">${vendName}</span>
-            <span class="mono text-[10px] text-slate-500">${vendSigned ? (vendTime || '已簽認') : '(待簽認)'}</span>
+            <span class="mono text-[10px] text-slate-500">${vendOk ? (vend.time || '已簽認') : '(待電子簽章)'}</span>
           </div>
+          <p data-sig-gate-role="vendor" class="${vendNeed ? '' : 'hidden '}mt-1 text-[10px] font-bold text-rose-600">請先完成電子簽章，簽完才能發布完工</p>
         </div>
 
         <!-- Box 3: 工地主任／主管覆核 -->
-        <div onclick="openSignaturePadModal('manager', ${tidArg})" class="cursor-pointer rounded-xl bg-white hover:bg-amber-50/40 border border-slate-300 hover:border-amber-500 p-2.5 flex flex-col justify-between transition shadow-sm">
+        <div onclick="${mgrClick}" class="${boxCls(mgrNeed, canMgr)}">
           <div class="flex items-center justify-between text-[11px]">
             <span class="font-extrabold text-slate-800">工地主任／主管覆核：</span>
-            <span class="text-amber-700 font-bold">✍️ 簽名/結案</span>
+            <span class="${mgrOk ? 'text-emerald-700' : (canMgr ? 'text-rose-600' : 'text-slate-400')} font-bold">${mgrOk ? '✅ 已簽章' : (canMgr ? '✨ 結案必簽' : '結案欄')}</span>
           </div>
           <div class="h-14 my-1 flex items-center justify-center overflow-hidden">
             ${mgrSigned && mgrImg
               ? `<img src="${mgrImg}" alt="工地主任覆核簽章" class="max-h-14 w-auto object-contain" />`
-              : `<span class="text-xs text-slate-400 font-semibold">工地主任 複驗合格結案</span>`
+              : `<span class="text-xs ${canMgr ? 'text-rose-500' : 'text-slate-400'} font-semibold">${mgrEmpty}</span>`
             }
           </div>
           <div class="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100">
             <span class="font-extrabold text-slate-900 truncate">${mgrName}</span>
-            <span class="mono text-[10px] text-slate-500">${mgrSigned ? (mgrTime || '已覆核') : '(待覆核)'}</span>
+            <span class="mono text-[10px] text-slate-500">${mgrOk ? (mgr.time || '已覆核') : '(待電子簽章)'}</span>
           </div>
+          <p data-sig-gate-role="manager" class="${mgrNeed ? '' : 'hidden '}mt-1 text-[10px] font-bold text-rose-600">請先完成電子簽章，簽完才能結案</p>
         </div>
       `;
     }
 
-    function renderStep4TriSignatureGrid() {
-      const grid = document.getElementById('step4-tri-signature-grid');
-      if (!grid) return;
-      const activeTicket = defects.find(item => item.id === currentVendorTicketId) || null;
-      grid.innerHTML = buildTriPartySignatureBoxesHtml(activeTicket, activeTicket ? activeTicket.id : null);
+    function renderAllSignatureGrids() {
+      const dispatchTicket = currentCaseDefect() || null;
+      const vendorTicket = defects.find(function(item) { return item.id === currentVendorTicketId; }) || null;
+      const pwaHtml = buildTriPartySignatureBoxesHtml(dispatchTicket, dispatchTicket ? dispatchTicket.id : null, 'dispatch');
+      const lineHtml = buildTriPartySignatureBoxesHtml(
+        dispatchTicket,
+        dispatchTicket ? dispatchTicket.id : null,
+        dispatchTicket ? 'dispatch-done' : 'dispatch'
+      );
+      const vendorHtml = buildTriPartySignatureBoxesHtml(vendorTicket, vendorTicket ? vendorTicket.id : null, 'vendor');
+      const pwaGrid = document.getElementById('pwa-dispatch-sig-grid');
+      if (pwaGrid) pwaGrid.innerHTML = pwaHtml;
+      const vendorGrid = document.getElementById('vendor-complete-sig-grid');
+      if (vendorGrid) vendorGrid.innerHTML = vendorHtml;
+      const step4 = document.getElementById('step4-tri-signature-grid');
+      if (step4) step4.innerHTML = lineHtml;
       const codeEl = document.getElementById('line-card-report-code');
       if (codeEl) {
-        codeEl.textContent = '產出編號：' + (activeTicket ? (activeTicket.reportCode || activeTicket.id) : draftSignatures.reportCode);
+        const t = dispatchTicket || vendorTicket;
+        codeEl.textContent = '產出編號：' + (t ? (t.reportCode || t.id) : draftSignatures.reportCode);
       }
+      const pdfGrid = document.getElementById('pdf-tri-signature-grid');
+      if (pdfGrid) {
+        const t = dispatchTicket || vendorTicket;
+        pdfGrid.innerHTML = buildTriPartySignatureBoxesHtml(t, t ? t.id : null, 'view');
+      }
+    }
+
+    function renderStep4TriSignatureGrid() {
+      renderAllSignatureGrids();
     }
 
     function initSignaturePadCanvasEvents() {
@@ -3858,8 +4337,15 @@
     }
 
     function openSignaturePadModal(role, ticketId) {
-      activeSigRole = role || 'inspector';
-      activeSigTicketId = ticketId || (defects.length > 0 ? defects[0].id : null);
+      const stage = signatureStageForUi();
+      const target = role || allowedStampRole(stage) || 'inspector';
+      if (!canStampRole(target, stage)) {
+        showToast(stampBlockedMessage(target, stage), 'error');
+        setSigGateHintVisible(allowedStampRole(stage) || target, true);
+        return;
+      }
+      activeSigRole = target;
+      activeSigTicketId = resolveSigTicketId(target, ticketId);
       const modal = document.getElementById('signature-pad-modal');
       if (modal) modal.classList.remove('hidden');
       switchSignatureRole(activeSigRole);
@@ -3871,12 +4357,20 @@
     }
 
     function switchSignatureRole(role) {
+      const stage = signatureStageForUi();
+      if (!canStampRole(role, stage)) {
+        showToast(stampBlockedMessage(role, stage), 'error');
+        role = allowedStampRole(stage) || role;
+      }
       activeSigRole = role;
       ['inspector', 'vendor', 'manager'].forEach(r => {
         const btn = document.getElementById('sig-role-btn-' + r);
         if (!btn) return;
+        const allowed = canStampRole(r, stage);
         if (r === role) {
           btn.className = 'py-1.5 px-1 rounded-lg font-bold bg-amber-500 text-slate-950 transition truncate shadow';
+        } else if (!allowed) {
+          btn.className = 'py-1.5 px-1 rounded-lg font-medium text-slate-600 cursor-not-allowed transition truncate';
         } else {
           btn.className = 'py-1.5 px-1 rounded-lg font-medium text-slate-400 hover:text-white transition truncate';
         }
@@ -3886,15 +4380,17 @@
       const nameInput = document.getElementById('sig-signer-name-input');
       if (nameInput) {
         if (role === 'inspector') {
-          nameInput.value = (d && d.signInspectorName) ? d.signInspectorName : currentInspectorName;
+          nameInput.value = (d && (d.signInspectorName || d.inspectorName)) ? (d.signInspectorName || d.inspectorName) : currentInspectorName;
         } else if (role === 'vendor') {
           nameInput.value = (d && (d.signVendorName || d.vendor)) ? (d.signVendorName || d.vendor) : (draftSignatures.vendor.name || '宏昇水電工程');
         } else {
-          nameInput.value = (d && d.signManagerName) ? d.signManagerName : '工地主任 / 所長';
+          nameInput.value = (d && d.signManagerName) ? d.signManagerName : (draftSignatures.manager && draftSignatures.manager.name && draftSignatures.manager.name !== '工地主任 / 所長' ? draftSignatures.manager.name : '');
+          nameInput.placeholder = '請輸入結案人姓名（例如陳科均）';
         }
       }
       sigPadStrokes = [];
       currentSigStroke = [];
+      autoGeneratedNameOnPad = '';
       drawAutoHandwrittenSignature();
     }
 
@@ -3909,7 +4405,8 @@
 
     function drawAutoHandwrittenSignature() {
       const nameInput = document.getElementById('sig-signer-name-input');
-      autoGeneratedNameOnPad = (nameInput && nameInput.value.trim()) ? nameInput.value.trim() : currentInspectorName;
+      const typed = nameInput && nameInput.value.trim();
+      autoGeneratedNameOnPad = typed || resolveSignerName(activeSigRole, activeSigTicketId ? defects.find(function(item) { return item.id === activeSigTicketId; }) : null);
       sigPadStrokes = [];
       currentSigStroke = [];
       redrawSignaturePadWithStamp();
@@ -3982,85 +4479,134 @@
       }
     }
 
-    function saveSignatureFromPad() {
-      const canvas = document.getElementById('sig-pad-canvas');
-      if (!canvas) return;
-      const nameInput = document.getElementById('sig-signer-name-input');
-      const signerName = (nameInput && nameInput.value.trim()) ? nameInput.value.trim() : '已簽署';
-      const stampChk = document.getElementById('sig-stamp-checkbox');
-      const withStamp = !stampChk || stampChk.checked;
-
-      // If canvas is blank, generate stylized signature for signerName
-      let dataUrl = '';
-      if (sigPadStrokes.length === 0 && !autoGeneratedNameOnPad) {
-        dataUrl = generateStylizedSignatureDataUrl(signerName, withStamp);
-      } else {
-        dataUrl = canvas.toDataURL('image/png');
+    function applySignatureImage(role, signerName, dataUrl, handwritten) {
+      const stage = signatureStageForUi();
+      if (!canStampRole(role, stage)) {
+        showToast(stampBlockedMessage(role, stage), 'error');
+        return;
       }
-
       const nowStr = new Date().toISOString().slice(0, 16).replace('T', ' ');
-      const d = activeSigTicketId ? defects.find(item => item.id === activeSigTicketId) : null;
-
-      if (activeSigRole === 'inspector') {
+      const tid = resolveSigTicketId(role, activeSigTicketId);
+      activeSigTicketId = tid;
+      const d = tid ? defects.find(item => item.id === tid) : null;
+      const hw = !!handwritten;
+      if (role === 'inspector') {
         currentInspectorName = signerName;
-        draftSignatures.inspector = { signed: true, name: signerName, time: nowStr, img: dataUrl };
+        draftSignatures.inspector = { signed: true, handwritten: hw, name: signerName, time: nowStr, img: dataUrl };
         if (d) {
           d.inspectorName = signerName;
           d.signInspector = true;
+          d.signInspectorHandwritten = hw;
           d.signInspectorName = signerName;
           d.signInspectorTime = nowStr;
           d.signInspectorImg = dataUrl;
         }
         syncProjectAndInspectorUI();
-      } else if (activeSigRole === 'vendor') {
-        draftSignatures.vendor = { signed: true, name: signerName, time: nowStr, img: dataUrl };
+      } else if (role === 'vendor') {
+        draftSignatures.vendor = { signed: true, handwritten: hw, name: signerName, time: nowStr, img: dataUrl };
         if (d) {
-          d.vendor = signerName;
           d.signVendor = true;
+          d.signVendorHandwritten = hw;
           d.signVendorName = signerName;
           d.signVendorTime = nowStr;
           d.signVendorImg = dataUrl;
         }
-      } else if (activeSigRole === 'manager') {
-        draftSignatures.manager = { signed: true, name: signerName, time: nowStr, img: dataUrl };
+      } else if (role === 'manager') {
+        draftSignatures.manager = { signed: true, handwritten: hw, name: signerName, time: nowStr, img: dataUrl };
         if (d) {
           d.signManager = true;
+          d.signManagerHandwritten = hw;
           d.signManagerName = signerName;
           d.signManagerTime = nowStr;
           d.signManagerImg = dataUrl;
-          d.status = 'CLOSED';
-          d.closedAt = nowStr;
         }
       }
-
+      if (d) packSignaturesOnDefect(d);
+      setSigGateHintVisible(role, false);
       saveDefectsToStorage();
-      renderStep4TriSignatureGrid();
+      if (d) persistTicketSignatures(d);
+      renderAllSignatureGrids();
       renderAdminBoard();
-      const pdfGrid = document.getElementById('pdf-tri-signature-grid');
-      if (pdfGrid) {
-        pdfGrid.innerHTML = buildTriPartySignatureBoxesHtml(d, d ? d.id : null);
+    }
+
+    function quickElectronicSign(role, ticketId) {
+      const stage = signatureStageForUi();
+      const target = role || allowedStampRole(stage) || 'inspector';
+      if (!canStampRole(target, stage)) {
+        showToast(stampBlockedMessage(target, stage), 'error');
+        setSigGateHintVisible(allowedStampRole(stage) || target, true);
+        return;
       }
+      activeSigRole = target;
+      activeSigTicketId = resolveSigTicketId(target, ticketId);
+      const d = activeSigTicketId ? defects.find(item => item.id === activeSigTicketId) : null;
+      if (roleHasValidSignature(activeSigRole, d)) {
+        openSignaturePadModal(activeSigRole, activeSigTicketId);
+        return;
+      }
+      const nameInput = document.getElementById('sig-signer-name-input');
+      const typed = nameInput && nameInput.value.trim();
+      const signerName = (target === 'manager' && typed) ? typed : resolveSignerName(activeSigRole, d);
+      if (target === 'manager' && (!signerName || signerName === '工地主任 / 所長')) {
+        openSignaturePadModal('manager', activeSigTicketId);
+        showToast('請輸入結案人姓名（例如陳科均）後再蓋電子簽章', 'info');
+        return;
+      }
+      const dataUrl = generateStylizedSignatureDataUrl(signerName, true);
+      applySignatureImage(activeSigRole, signerName, dataUrl, false);
+      showToast('✅ 已完成「' + signerName + '」電子簽章', 'success');
+    }
+
+    function saveSignatureFromPad() {
+      const canvas = document.getElementById('sig-pad-canvas');
+      if (!canvas) return;
+      const stage = signatureStageForUi();
+      if (!canStampRole(activeSigRole, stage)) {
+        showToast(stampBlockedMessage(activeSigRole, stage), 'error');
+        return;
+      }
+      const nameInput = document.getElementById('sig-signer-name-input');
+      const signerName = (nameInput && nameInput.value.trim()) ? nameInput.value.trim() : resolveSignerName(activeSigRole, activeSigTicketId ? defects.find(function(item) { return item.id === activeSigTicketId; }) : null);
+      if (activeSigRole === 'manager' && (!signerName || signerName === '工地主任 / 所長')) {
+        showToast('請輸入結案人姓名（例如陳科均）', 'error');
+        return;
+      }
+      const stampChk = document.getElementById('sig-stamp-checkbox');
+      const withStamp = !stampChk || stampChk.checked;
+      const handwritten = countSigPadPoints() >= 8;
+      let dataUrl = '';
+      if (handwritten || autoGeneratedNameOnPad) {
+        dataUrl = canvas.toDataURL('image/png');
+      } else {
+        dataUrl = generateStylizedSignatureDataUrl(signerName, withStamp);
+      }
+
+      applySignatureImage(activeSigRole, signerName, dataUrl, handwritten);
       closeSignaturePadModal();
-      showToast(`✍️ 已完成「${signerName}」手寫電子簽章覆核！`, 'success');
+      showToast('✅ 已完成「' + signerName + '」電子簽章覆核', 'success');
     }
 
     function clearAndRemoveRoleSignature() {
       const d = activeSigTicketId ? defects.find(item => item.id === activeSigTicketId) : null;
       if (activeSigRole === 'inspector') {
         draftSignatures.inspector.signed = false;
+        draftSignatures.inspector.handwritten = false;
         draftSignatures.inspector.img = '';
-        if (d) { d.signInspector = false; d.signInspectorImg = ''; d.signInspectorTime = ''; }
+        if (d) { d.signInspector = false; d.signInspectorHandwritten = false; d.signInspectorImg = ''; d.signInspectorTime = ''; }
       } else if (activeSigRole === 'vendor') {
         draftSignatures.vendor.signed = false;
+        draftSignatures.vendor.handwritten = false;
         draftSignatures.vendor.img = '';
-        if (d) { d.signVendor = false; d.signVendorImg = ''; d.signVendorTime = ''; }
+        if (d) { d.signVendor = false; d.signVendorHandwritten = false; d.signVendorImg = ''; d.signVendorTime = ''; }
       } else if (activeSigRole === 'manager') {
         draftSignatures.manager.signed = false;
+        draftSignatures.manager.handwritten = false;
         draftSignatures.manager.img = '';
-        if (d) { d.signManager = false; d.signManagerImg = ''; d.signManagerTime = ''; }
+        if (d) { d.signManager = false; d.signManagerHandwritten = false; d.signManagerImg = ''; d.signManagerTime = ''; }
       }
       saveDefectsToStorage();
-      renderStep4TriSignatureGrid();
+      if (d) persistTicketSignatures(d);
+      renderAllSignatureGrids();
       renderAdminBoard();
       closeSignaturePadModal();
       showToast('🔄 已將該欄位重設為「待簽認」狀態', 'info');
@@ -4084,6 +4630,8 @@
       window.sendCompletionToLine = sendCompletionToLine;
       window.addVocabFromInput = addVocabFromInput;
       window.removeVocabItem = removeVocabItem;
+      window.fillPwaLocationField = fillPwaLocationField;
+      window.applyPwaVocabSelect = applyPwaVocabSelect;
       window.toggleOwnerAuth = toggleOwnerAuth;
       window.chooseEntryRole = chooseEntryRole;
       window.openSiteSettings = openSiteSettings;
@@ -4092,8 +4640,18 @@
       window.saveOwnerPin = saveOwnerPin;
       window.voidTicketOnCard = voidTicketOnCard;
       window.harvestVocabFromDefects = harvestVocabFromDefects;
+      window.saveCurrentSiteSettings = saveCurrentSiteSettings;
+      window.openRequiredSignaturePad = openRequiredSignaturePad;
+      window.requireRoleSignature = requireRoleSignature;
+      window.quickElectronicSign = quickElectronicSign;
+      window.setSigGateHintVisible = setSigGateHintVisible;
+      window.renderAllSignatureGrids = renderAllSignatureGrids;
+      window.openSignaturePadModal = openSignaturePadModal;
+      window.switchSignatureRole = switchSignatureRole;
+      window.saveSignatureFromPad = saveSignatureFromPad;
       initProjectMeta();
       uiMode = isOwnerSession() ? 'engineer' : 'vendor';
+      currentMainTab = uiMode === 'engineer' ? 'overview' : 'vendor';
       defects = [];
       currentVendorTicketId = null;
       initCanvas();
@@ -4139,6 +4697,13 @@
           el.addEventListener('input', updateLiveLinePreviewText);
           el.addEventListener('change', updateLiveLinePreviewText);
         }
+      });
+      ['pwa-building', 'pwa-floor', 'pwa-area', 'pwa-trade-custom'].forEach(function(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('input', function() {
+          renderLocationPickers();
+        });
       });
     };
 
