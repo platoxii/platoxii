@@ -54,6 +54,7 @@
     let uiMode = 'vendor';
     let ownerPin = '2468';
     let pendingDeepLink = null;
+    let linkUnlockedTab = '';
     let liveCameraStream = null;
     let liveCameraTarget = 'pwa';
     const OWNER_SESSION_KEY = 'siteqc_owner_ok_v1';
@@ -3241,7 +3242,7 @@
     }
 
     function openAdminTicket(id) {
-      if (uiMode !== 'engineer') {
+      if (uiMode !== 'engineer' && linkUnlockedTab !== 'admin') {
         pendingDeepLink = { type: 'admin', id: id };
         openOwnerLoginModal();
         showToast('查驗結案要工務登入', 'info');
@@ -3343,8 +3344,51 @@
         showToast('已登入甲方。1 拍照提報、3 查驗結案已開放。', 'success');
         return;
       }
+      if (pending && pending.type === 'settings') {
+        switchMainTab('settings');
+        showToast('已進入工地設定。', 'success');
+        return;
+      }
+      if (pending && pending.type === 'review') {
+        switchMainTab('admin');
+        showToast('已進入查驗結案。', 'success');
+        return;
+      }
       switchMainTab('overview');
       showToast('已登入甲方。1 拍照提報、3 查驗結案已開放。', 'success');
+    }
+
+    function chooseEntryRole(role) {
+      if (role === 'vendor') {
+        uiMode = 'vendor';
+        applyVendorAccessLock();
+        switchMainTab('vendor');
+        showToast('請處理廠商回傳。', 'info');
+        return;
+      }
+      pendingDeepLink = role === 'review' ? { type: 'review' } : null;
+      if (isOwnerSession()) {
+        uiMode = 'engineer';
+        applyVendorAccessLock();
+        switchMainTab(role === 'review' ? 'admin' : 'overview');
+        return;
+      }
+      openOwnerLoginModal();
+      showToast(role === 'review' ? '三方查驗要工務密碼' : '開缺失要工務密碼', 'info');
+    }
+
+    function openSiteSettings() {
+      if (uiMode !== 'engineer') {
+        pendingDeepLink = { type: 'settings' };
+        openOwnerLoginModal();
+        showToast('工地設定要工務密碼', 'info');
+        return;
+      }
+      switchMainTab('settings');
+    }
+
+    function hasWorkDeepLink() {
+      return /^#\/?(admin|vendor)\//i.test(String(window.location.hash || ''));
     }
 
     function logoutOwner() {
@@ -3377,11 +3421,11 @@
     }
 
     function switchMainTab(tabKey) {
-      if (uiMode === 'vendor' && tabKey !== 'vendor') {
+      if (uiMode === 'vendor' && tabKey !== 'vendor' && tabKey !== 'role' && tabKey !== linkUnlockedTab) {
         showToast('沒有權限。請在「廠商回傳」處理這張缺失。', 'error');
         tabKey = 'vendor';
       }
-      ['overview', 'pwa', 'vendor', 'admin', 'arch'].forEach(k => {
+      ['overview', 'pwa', 'vendor', 'admin', 'arch', 'settings', 'role'].forEach(k => {
         const view = document.getElementById('view-' + k);
         const btn = document.getElementById('tab-btn-' + k);
         if (view) {
@@ -3399,7 +3443,19 @@
       if (tabKey === 'admin' || tabKey === 'vendor' || tabKey === 'overview' || tabKey === 'pwa') {
         refreshFromCloud(true);
       }
+      const nav = document.getElementById('main-tab-nav');
+      if (nav) {
+        if (tabKey === 'role') nav.classList.add('hidden');
+        else nav.classList.remove('hidden');
+      }
       applyVendorAccessLock();
+      if (tabKey === 'role') {
+        const role = document.getElementById('header-role-badge');
+        if (role) {
+          role.textContent = '選擇';
+          role.className = 'px-2 py-1 rounded-lg bg-slate-700 text-white font-extrabold text-xs shrink-0 shadow';
+        }
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -3527,8 +3583,8 @@
       isLightMode = !isLightMode;
       document.body.classList.toggle('theme-light', isLightMode);
       const iconEl = document.getElementById('theme-toggle-icon');
-      if (iconEl) iconEl.textContent = isLightMode ? '🌙' : '☀️';
-      showToast(isLightMode ? '☀️ 已切換至淺色模式' : '🌙 已切換至深色模式', 'info');
+      if (iconEl) iconEl.textContent = isLightMode ? '深色' : '淺色';
+      showToast(isLightMode ? '已切換至淺色' : '已切換至深色', 'info');
     }
 
     function setReviewCompareMode(mode) {
@@ -3639,12 +3695,14 @@
       const h = String(window.location.hash || '');
       const adminM = h.match(/^#\/?admin\/?([^?]*)/i);
       if (adminM) {
+        linkUnlockedTab = 'admin';
         const found = findDefectByHashToken(adminM[1]);
         openAdminTicket(found ? found.id : String(adminM[1] || '').trim());
         return;
       }
       const m = h.match(/^#\/?vendor\/?([^?]*)/i);
       if (!m) return;
+      linkUnlockedTab = 'vendor';
       const found = findDefectByHashToken(m[1]);
       if (found) currentVendorTicketId = found.id;
       currentVendorCard = 2;
@@ -4027,6 +4085,8 @@
       window.addVocabFromInput = addVocabFromInput;
       window.removeVocabItem = removeVocabItem;
       window.toggleOwnerAuth = toggleOwnerAuth;
+      window.chooseEntryRole = chooseEntryRole;
+      window.openSiteSettings = openSiteSettings;
       window.submitOwnerLogin = submitOwnerLogin;
       window.closeOwnerLoginModal = closeOwnerLoginModal;
       window.saveOwnerPin = saveOwnerPin;
@@ -4042,7 +4102,7 @@
       initSignaturePadCanvasEvents();
       applyVendorAccessLock();
       syncLineInAppBanner();
-      if (uiMode !== 'engineer') switchMainTab('vendor');
+      if (!hasWorkDeepLink()) switchMainTab('role');
       setCloudSyncBadge('loading');
       refreshDefectsUi();
 
