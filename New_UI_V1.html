@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>New_UI_V1 三種門示範</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --phone: #0b1120;
+      --card: #0f172a;
+      --card-2: #111827;
+      --text: #f8fafc;
+      --muted: #cbd5e1;
+      --faint: #94a3b8;
+      --line: #334155;
+      --amber: #f59e0b;
+      --amber-ink: #0f172a;
+      --danger: #fb7185;
+      --ok: #34d399;
+      --info: #7dd3fc;
+    }
+    body.light {
+      --bg: #cbd5e1;
+      --phone: #e2e8f0;
+      --card: #ffffff;
+      --card-2: #f8fafc;
+      --text: #0f172a;
+      --muted: #1e293b;
+      --faint: #334155;
+      --line: #94a3b8;
+      --amber: #d97706;
+      --amber-ink: #0f172a;
+      --danger: #be123c;
+      --ok: #047857;
+      --info: #0369a1;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+      font-size: 16px;
+      line-height: 1.45;
+    }
+    #app {
+      max-width: 430px;
+      min-height: 100dvh;
+      margin: 0 auto;
+      background: var(--phone);
+      padding: 12px 12px 28px;
+      overflow-x: hidden;
+    }
+    header.top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    header.top h1 {
+      flex: 1;
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.3;
+    }
+    header.top p {
+      margin: 2px 0 0;
+      color: var(--faint);
+      font-size: 13px;
+    }
+    button, .chip, input, textarea { font: inherit; }
+    button {
+      border: 0;
+      cursor: pointer;
+      border-radius: 14px;
+      min-height: 48px;
+      padding: 12px 14px;
+    }
+    button:active { transform: scale(0.99); }
+    .icon-btn {
+      min-height: 40px;
+      padding: 8px 10px;
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      font-size: 14px;
+    }
+    .primary {
+      width: 100%;
+      background: var(--amber);
+      color: var(--amber-ink);
+      font-weight: 800;
+      font-size: 18px;
+    }
+    .primary:disabled {
+      background: var(--card);
+      color: var(--faint);
+      border: 1px solid var(--line);
+    }
+    .door {
+      width: 100%;
+      text-align: left;
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--line);
+      margin-bottom: 10px;
+      display: block;
+    }
+    .door b { display: block; font-size: 18px; }
+    .door span { display: block; margin-top: 4px; color: var(--faint); font-size: 14px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+    .card img {
+      width: 100%;
+      max-height: 220px;
+      object-fit: cover;
+      border-radius: 12px;
+      display: block;
+    }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .chip {
+      border: 1px solid var(--line);
+      background: var(--card-2);
+      color: var(--text);
+      border-radius: 999px;
+      min-height: 40px;
+      padding: 8px 12px;
+    }
+    .chip.on {
+      background: var(--amber);
+      color: var(--amber-ink);
+      border-color: var(--amber);
+      font-weight: 800;
+    }
+    .photo {
+      width: 100%;
+      min-height: 140px;
+      border-radius: 12px;
+      background: #1e293b center/cover no-repeat;
+      display: flex;
+      align-items: flex-end;
+      color: white;
+      font-weight: 800;
+      padding: 10px;
+    }
+    body.light .photo { color: #0f172a; background-color: #cbd5e1; }
+    .photo img, .pair img {
+      width: 100%;
+      height: 140px;
+      object-fit: cover;
+      border-radius: 12px;
+      display: block;
+    }
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .pair figcaption { font-size: 13px; color: var(--faint); margin-bottom: 4px; }
+    label.field { display: block; font-size: 14px; color: var(--muted); margin: 10px 0 6px; }
+    input[type="text"], input[type="password"], textarea {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--card-2);
+      color: var(--text);
+      padding: 12px;
+      min-height: 48px;
+    }
+    textarea { min-height: 72px; resize: vertical; }
+    canvas#sig {
+      width: 100%;
+      height: 140px;
+      border-radius: 12px;
+      border: 1px dashed var(--line);
+      background: #fff;
+      touch-action: none;
+    }
+    .hint { color: var(--faint); font-size: 13px; margin: 8px 0; }
+    .need { color: var(--danger); font-size: 14px; font-weight: 700; margin: 8px 0; }
+    .kpi { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .kpi div { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px; }
+    .kpi strong { display: block; font-size: 32px; line-height: 1.1; }
+    .ticket {
+      width: 100%;
+      text-align: left;
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--line);
+      margin-bottom: 8px;
+    }
+    .ticket b { font-size: 16px; }
+    .status { font-size: 13px; font-weight: 800; }
+    .status.wait { color: var(--amber); }
+    .status.check { color: var(--info); }
+    .status.done { color: var(--ok); }
+    .status.late { color: var(--danger); }
+    .line-bubble {
+      background: #14532d;
+      color: #ecfdf5;
+      border-radius: 16px;
+      padding: 14px;
+    }
+    body.light .line-bubble { background: #dcfce7; color: #14532d; }
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      background: var(--amber);
+      color: var(--amber-ink);
+      font-weight: 800;
+      border-radius: 999px;
+      padding: 10px 14px;
+      max-width: 90vw;
+    }
+    .file-btn { display: inline-block; }
+    .file-btn input { display: none; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    const TODAY = "2026-11-13";
+    const SITES = ["平安建設", "集成", "第三工地"];
+
+    function solidPhoto(label, bg, mark) {
+      const c = document.createElement("canvas");
+      c.width = 640;
+      c.height = 400;
+      const g = c.getContext("2d");
+      g.fillStyle = bg;
+      g.fillRect(0, 0, 640, 400);
+      g.fillStyle = "rgba(15,23,42,0.25)";
+      g.fillRect(0, 300, 640, 100);
+      g.fillStyle = "#0f172a";
+      g.font = "bold 42px sans-serif";
+      g.fillText(label, 28, 250);
+      if (mark) {
+        g.strokeStyle = "#e11d48";
+        g.lineWidth = 8;
+        g.beginPath();
+        g.ellipse(430, 160, 90, 70, 0, 0, Math.PI * 2);
+        g.stroke();
+      }
+      return c.toDataURL("image/jpeg", 0.8);
+    }
+
+    const BEFORE = solidPhoto("施工前", "#cbd5e1", true);
+    const AFTER = solidPhoto("施工後", "#a7f3d0", false);
+
+    const state = {
+      theme: "dark",
+      screen: "who",
+      site: "平安建設",
+      bossSite: "全部",
+      ticketId: "",
+      toast: "",
+      vocabPlaces: ["3F 大廳", "B1 電氣室", "2F 走廊", "戶外鷹架"],
+      trades: ["水泥工班", "水電", "油漆", "鋁門窗"],
+      draft: null,
+      tickets: [
+        { id: "20261113-006", site: "平安建設", trade: "水泥工班", place: "3F 大廳", desc: "牆面空鼓，敲門有聲音", due: "2026-11-18", status: "待回傳", before: BEFORE, after: "", sigs: { engineer: true, vendor: false, director: false }, closedOn: "" },
+        { id: "20261110-004", site: "平安建設", trade: "水電", place: "B1 電氣室", desc: "配線外露", due: "2026-11-10", status: "待查驗", before: BEFORE, after: AFTER, sigs: { engineer: true, vendor: true, director: false }, closedOn: "" },
+        { id: "20261112-002", site: "平安建設", trade: "水泥工班", place: "1F 玄關", desc: "地坪不平整", due: "2026-11-12", status: "已結案", before: BEFORE, after: AFTER, sigs: { engineer: true, vendor: true, director: true }, closedOn: "2026-11-12" },
+        { id: "20261111-011", site: "集成", trade: "油漆", place: "2F 走廊", desc: "色差", due: "2026-11-16", status: "已結案", before: BEFORE, after: AFTER, sigs: { engineer: true, vendor: true, director: true }, closedOn: "2026-11-11" },
+        { id: "20261109-009", site: "集成", trade: "水電", place: "屋頂水箱", desc: "接頭滲水", due: "2026-11-09", status: "待回傳", before: BEFORE, after: "", sigs: { engineer: true, vendor: false, director: false }, closedOn: "" }
+      ]
+    };
+
+    function esc(s) {
+      return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+      });
+    }
+    function zhDate(iso) {
+      const p = String(iso).split("-");
+      return Number(p[1]) + "/" + Number(p[2]);
+    }
+    function overdueDays(due) {
+      const ms = Date.parse(TODAY) - Date.parse(due);
+      return Math.floor(ms / 86400000);
+    }
+    function fineOf(t) {
+      if (t.status === "已結案") return 0;
+      const d = overdueDays(t.due);
+      return d > 0 ? d * 500 : 0;
+    }
+    function ticket(id) {
+      return state.tickets.find(function (t) { return t.id === id; });
+    }
+    function blankDraft() {
+      return { trade: "水泥工班", place: "3F 大廳", customPlace: "", desc: "", photo: "", strokes: [], current: [] };
+    }
+    function showToast(text) {
+      state.toast = text;
+      render();
+      setTimeout(function () {
+        if (state.toast === text) {
+          state.toast = "";
+          const node = document.getElementById("toast");
+          if (node) node.remove();
+        }
+      }, 2200);
+    }
+
+    function header(title, sub, backAct, gear) {
+      return (
+        '<header class="top">' +
+          (backAct ? '<button type="button" class="icon-btn" data-act="' + backAct + '">返回</button>' : '') +
+          '<div style="flex:1;min-width:0"><h1>' + esc(title) + '</h1>' +
+          (sub ? '<p>' + esc(sub) + '</p>' : '') + '</div>' +
+          (gear ? '<button type="button" class="icon-btn" data-act="settings">工地設定</button>' : '') +
+          '<button type="button" class="icon-btn" data-act="theme">' + (state.theme === "dark" ? "淺色" : "深色") + '</button>' +
+        '</header>'
+      );
+    }
+
+    function chips(list, current, act) {
+      return '<div class="row">' + list.map(function (name) {
+        return '<button type="button" class="chip' + (name === current ? ' on' : '') + '" data-act="' + act + '" data-arg="' + esc(name) + '">' + esc(name) + '</button>';
+      }).join("") + '</div>';
+    }
+
+    function photoBlock(url, label) {
+      if (url) return '<img alt="' + esc(label) + '" src="' + url + '">';
+      return '<div class="photo">' + esc(label) + '</div>';
+    }
+
+    function statusClass(t) {
+      if (fineOf(t) > 0 && t.status !== "已結案") return "late";
+      if (t.status === "待回傳") return "wait";
+      if (t.status === "待查驗") return "check";
+      return "done";
+    }
+    function statusText(t) {
+      const fine = fineOf(t);
+      if (fine > 0) return "逾期 " + overdueDays(t.due) + " 天";
+      return t.status;
+    }
+
+    function screenWho() {
+      return header("你是誰", "New_UI_V1 示範，資料是假的", "", false) +
+        '<p class="hint">這四個門給你試流程。正式版廠商從 LINE 點「我修好了」，直接進自己那一張卡。</p>' +
+        '<button type="button" class="door" data-act="role" data-arg="engineer"><b>我是甲方，要開缺失</b><span>先選平安、集成或第三工地，再拍照發群組</span></button>' +
+        '<button type="button" class="door" data-act="role" data-arg="vendor"><b>我是水泥工，來上傳完工</b><span>只看到水泥群組裡自己的卡</span></button>' +
+        '<button type="button" class="door" data-act="role" data-arg="director"><b>我是主任，來簽名結案</b><span>對施工前和施工後，補第三個簽名</span></button>' +
+        '<button type="button" class="door" data-act="role" data-arg="boss"><b>我看本週和逾期</b><span>完成幾張、誰超過期限、示範罰款</span></button>';
+    }
+
+    function screenEngineer() {
+      const list = state.tickets.filter(function (t) { return t.site === state.site; });
+      const open = list.filter(function (t) { return t.status !== "已結案"; }).length;
+      const cards = list.length ? list.map(function (t) {
+        return '<div class="card"><b>#' + esc(t.id.split("-")[1]) + ' ' + esc(t.trade) + '</b><div>' + esc(t.place) + ' · ' + esc(t.desc) + '</div><div class="status ' + statusClass(t) + '">' + esc(statusText(t)) + ' · 期限 ' + zhDate(t.due) + '</div></div>';
+      }).join("") : '<div class="card">這個工地還沒有缺失。下面那一顆就可以開第一張。</div>';
+      return header(state.site, "今天還有 " + open + " 張沒結", "who", true) +
+        chips(SITES, state.site, "site") +
+        '<div style="height:10px"></div>' +
+        '<button type="button" class="primary" data-act="create">拍照，開一張缺失</button>' +
+        '<div style="height:12px"></div>' + cards;
+    }
+
+    function sigReady(draft) {
+      const n = draft.strokes.reduce(function (sum, line) { return sum + line.length; }, 0) + draft.current.length;
+      return n > 4;
+    }
+    function draftPlace(draft) {
+      return (draft.customPlace || "").trim() || draft.place;
+    }
+    function missingCreate(draft) {
+      const miss = [];
+      if (!draft.photo) miss.push("照片");
+      if (!draft.trade) miss.push("工班");
+      if (!draftPlace(draft)) miss.push("位置");
+      if (!(draft.desc || "").trim()) miss.push("一句話說明");
+      if (!sigReady(draft)) miss.push("簽名");
+      return miss;
+    }
+
+    function screenCreate() {
+      const d = state.draft;
+      const miss = missingCreate(d);
+      const group = d.trade || "工班";
+      return header("開一張缺失", state.site, "engineer", false) +
+        '<div class="card">' + photoBlock(d.photo, "先拍缺失的地方") +
+        '<div class="row" style="margin-top:8px">' +
+          '<label class="file-btn chip">用相機或相簿<input type="file" accept="image/*" capture="environment" onchange="onPickPhoto(this)"></label>' +
+          '<button type="button" class="chip" data-act="demo-photo">用示範照片</button>' +
+        '</div></div>' +
+        '<label class="field">發給哪個工班</label>' + chips(state.trades, d.trade, "trade") +
+        '<label class="field">位置</label>' + chips(state.vocabPlaces, d.place, "place") +
+        '<input id="custom-place" type="text" placeholder="或自己打，例如 5F 北側" value="' + esc(d.customPlace) + '" oninput="state.draft.customPlace=this.value; paintMissing()">' +
+        '<label class="field">一句話</label>' +
+        '<textarea id="desc" placeholder="例如：牆面空鼓，敲門有聲音" oninput="state.draft.desc=this.value; paintMissing()">' + esc(d.desc) + '</textarea>' +
+        '<label class="field">甲方簽名</label><canvas id="sig" width="600" height="220"></canvas>' +
+        '<p class="hint">用手指簽。簽完才能發到' + esc(group) + '群組。</p>' +
+        '<p id="miss" class="need">' + (miss.length ? "還差：" + esc(miss.join("、")) : "可以發了") + '</p>' +
+        '<button type="button" class="primary" id="send" data-act="send"' + (miss.length ? " disabled" : "") + '>發到' + esc(group) + '群組</button>';
+    }
+
+    function missingNow() {
+      const d = state.draft;
+      if (!d) return ["簽名"];
+      if (state.screen === "director-one") return sigReady(d) ? [] : ["簽名"];
+      if (state.screen === "vendor" || state.screen === "vendor-one") {
+        const miss = [];
+        if (!d.photo) miss.push("完工照");
+        if (!sigReady(d)) miss.push("簽名");
+        return miss;
+      }
+      return missingCreate(d);
+    }
+    function paintMissing() {
+      if (!state.draft) return;
+      const miss = missingNow();
+      const done = state.screen === "create" ? "可以發了" : "可以送出";
+      const missNode = document.getElementById("miss");
+      const send = document.getElementById("send");
+      if (missNode) missNode.textContent = miss.length ? "還差：" + miss.join("、") : done;
+      if (send) send.disabled = miss.length > 0;
+    }
+
+    function screenLine() {
+      const t = ticket(state.ticketId);
+      if (!t) return screenWho();
+      return header("已經丟進群組", t.trade + "群組", "who", false) +
+        '<div class="line-bubble"><b>' + esc(t.site) + ' #' + esc(t.id.split("-")[1]) + '</b>' +
+        '<div>' + esc(t.trade) + ' · ' + esc(t.place) + '</div>' +
+        '<div>' + esc(t.desc) + '</div>' +
+        '<div>期限 ' + zhDate(t.due) + '</div></div>' +
+        '<div style="height:12px"></div>' +
+        '<button type="button" class="primary" data-act="open-vendor" data-arg="' + esc(t.id) + '">我修好了</button>' +
+        '<p class="hint">工人在 LINE 裡只會看到這則訊息和下面這顆。點下去就換成他的畫面。</p>';
+    }
+
+    function screenVendor() {
+      const mine = state.tickets.filter(function (t) { return t.trade === "水泥工班" && t.status === "待回傳"; });
+      if (!state.ticketId && mine.length === 1) state.ticketId = mine[0].id;
+      if (!state.ticketId) {
+        const cards = mine.length ? mine.map(function (t) {
+          return '<button type="button" class="ticket" data-act="open-vendor" data-arg="' + esc(t.id) + '"><b>' + esc(t.site) + ' #' + esc(t.id.split("-")[1]) + '</b><div>' + esc(t.place) + ' · ' + esc(t.desc) + '</div></button>';
+        }).join("") : '<div class="card">水泥群組目前沒有要你修的卡。</div>';
+        return header("我的卡", "水泥工班", "who", false) + cards;
+      }
+      const t = ticket(state.ticketId);
+      if (!t) return screenWho();
+      const d = state.draft || (state.draft = blankDraft());
+      const miss = missingNow();
+      const back = mine.length > 1 ? "vendor-list" : "who";
+      return header("上傳完工", t.site + " #" + t.id.split("-")[1], back, false) +
+        '<div class="card"><b>' + esc(t.trade) + ' · ' + esc(t.place) + '</b><div>' + esc(t.desc) + '</div><div class="hint">期限 ' + zhDate(t.due) + '</div></div>' +
+        '<label class="field">施工前，照著這個位置拍</label>' + photoBlock(t.before, "施工前") +
+        '<label class="field">施工後</label>' +
+        (d.photo ? photoBlock(d.photo, "施工後") : '<div class="photo">還沒拍完工照</div>') +
+        '<div class="row" style="margin-top:8px">' +
+          '<label class="file-btn chip">拍照或相簿<input type="file" accept="image/*" capture="environment" onchange="onPickPhoto(this)"></label>' +
+          '<button type="button" class="chip" data-act="demo-after">用示範完工照</button>' +
+        '</div>' +
+        '<label class="field">你的簽名</label><canvas id="sig" width="600" height="220"></canvas>' +
+        '<p id="miss" class="need">' + (miss.length ? "還差：" + esc(miss.join("、")) : "可以送出") + '</p>' +
+        '<button type="button" class="primary" id="send" data-act="vendor-send"' + (miss.length ? " disabled" : "") + '>送出，請主任來看</button>';
+    }
+
+    function screenDirector() {
+      if (state.ticketId && state.screen === "director-one") return screenDirectorOne();
+      const list = state.tickets.filter(function (t) { return t.status === "待查驗"; });
+      const cards = list.length ? list.map(function (t) {
+        return '<button type="button" class="ticket" data-act="open-director" data-arg="' + esc(t.id) + '"><b>' + esc(t.site) + ' #' + esc(t.id.split("-")[1]) + ' ' + esc(t.trade) + '</b><div>' + esc(t.place) + ' · ' + esc(t.desc) + '</div><div class="status check">等你簽名</div></button>';
+      }).join("") : '<div class="card">現在沒有等你簽名的卡。</div>';
+      return header("等我簽名", list.length + " 張", "who", false) + cards;
+    }
+
+    function screenDirectorOne() {
+      const t = ticket(state.ticketId);
+      if (!t) return screenDirector();
+      const d = state.draft || (state.draft = blankDraft());
+      const ready = sigReady(d);
+      return header("施工前對施工後", t.site + " #" + t.id.split("-")[1], "director", false) +
+        '<div class="card"><b>' + esc(t.trade) + ' · ' + esc(t.place) + '</b><div>' + esc(t.desc) + '</div></div>' +
+        '<div class="pair"><figure><figcaption>施工前</figcaption>' + photoBlock(t.before, "施工前") + '</figure>' +
+        '<figure><figcaption>施工後</figcaption>' + photoBlock(t.after, "還沒有完工照") + '</figure></div>' +
+        '<p class="hint">陳工程師已簽。' + (t.sigs.vendor ? esc(t.trade) + '已簽。' : '廠商還沒簽。') + '</p>' +
+        '<label class="field">主任簽名</label><canvas id="sig" width="600" height="220"></canvas>' +
+        '<p id="miss" class="need">' + (ready ? "可以結案" : "還差：簽名") + '</p>' +
+        '<button type="button" class="primary" id="send" data-act="close"' + (ready ? "" : " disabled") + '>簽名結案</button>';
+    }
+
+    function screenBoss() {
+      const rows = state.tickets.filter(function (t) { return state.bossSite === "全部" || t.site === state.bossSite; });
+      const done = rows.filter(function (t) { return t.status === "已結案" && t.closedOn >= "2026-11-09"; });
+      const late = rows.filter(function (t) { return fineOf(t) > 0; });
+      const lateCards = late.length ? late.map(function (t) {
+        return '<div class="card"><b>' + esc(t.site) + ' #' + esc(t.id.split("-")[1]) + ' ' + esc(t.trade) + '</b><div>' + esc(t.place) + ' · 期限 ' + zhDate(t.due) + '</div><div class="status late">逾期 ' + overdueDays(t.due) + ' 天 · 示範罰款 ' + fineOf(t) + '</div></div>';
+      }).join("") : '<div class="card">這個範圍沒有逾期。</div>';
+      const doneCards = done.map(function (t) {
+        return '<div class="card"><b>' + esc(t.site) + ' #' + esc(t.id.split("-")[1]) + ' ' + esc(t.trade) + '</b><div class="status done">已結案 ' + zhDate(t.closedOn) + '</div></div>';
+      }).join("");
+      return header("本週和逾期", "示範罰款：逾期一天 500", "who", false) +
+        chips(["全部"].concat(SITES), state.bossSite, "boss-site") +
+        '<div class="kpi" style="margin-top:10px"><div><span>本週完成</span><strong>' + done.length + '</strong></div><div><span>逾期</span><strong>' + late.length + '</strong></div></div>' +
+        '<label class="field">超過期限</label>' + lateCards +
+        '<label class="field">本週完成</label>' + (doneCards || '<div class="card">這週還沒有結案。</div>');
+    }
+
+    function screenSettings() {
+      return header("工地設定", state.site + " 的常用位置", "engineer", false) +
+        '<label class="field">常用位置</label>' +
+        '<div class="card">' + state.vocabPlaces.map(function (p) { return esc(p); }).join("、") + '</div>' +
+        '<div class="row">' +
+          '<input id="new-place" type="text" placeholder="例如 5F 北側" style="flex:1">' +
+          '<button type="button" class="chip" data-act="add-place">新增</button>' +
+        '</div>' +
+        '<label class="field">工務密碼</label>' +
+        '<input id="pin" type="password" value="2468">' +
+        '<div style="height:10px"></div>' +
+        '<button type="button" class="primary" data-act="save-settings">儲存這個工地</button>' +
+        '<p class="hint">設定收在這裡。開工地的人不用先看密碼和詞彙。</p>';
+    }
+
+    function bodyFor() {
+      if (state.screen === "engineer") return screenEngineer();
+      if (state.screen === "create") return screenCreate();
+      if (state.screen === "line") return screenLine();
+      if (state.screen === "vendor" || state.screen === "vendor-one") return screenVendor();
+      if (state.screen === "director" || state.screen === "director-one") return screenDirector();
+      if (state.screen === "boss") return screenBoss();
+      if (state.screen === "settings") return screenSettings();
+      return screenWho();
+    }
+
+    function render() {
+      document.body.classList.toggle("light", state.theme === "light");
+      document.getElementById("app").innerHTML = bodyFor() + (state.toast ? '<div id="toast" class="toast">' + esc(state.toast) + '</div>' : "");
+      bindSig();
+    }
+
+    function bindSig() {
+      const canvas = document.getElementById("sig");
+      const draft = state.draft;
+      if (!canvas || !draft) return;
+      const ctx = canvas.getContext("2d");
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = "#0f172a";
+        ctx.lineWidth = 4;
+        ctx.lineCap = "round";
+        draft.strokes.concat([draft.current]).forEach(function (line) {
+          if (!line || line.length < 2) return;
+          ctx.beginPath();
+          ctx.moveTo(line[0].x, line[0].y);
+          for (let i = 1; i < line.length; i++) ctx.lineTo(line[i].x, line[i].y);
+          ctx.stroke();
+        });
+      }
+      function point(e) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: (e.clientX - rect.left) * (canvas.width / rect.width),
+          y: (e.clientY - rect.top) * (canvas.height / rect.height)
+        };
+      }
+      draw();
+      canvas.onpointerdown = function (e) {
+        canvas.setPointerCapture(e.pointerId);
+        draft.current = [point(e)];
+        draw();
+      };
+      canvas.onpointermove = function (e) {
+        if (!draft.current.length) return;
+        draft.current.push(point(e));
+        draw();
+      };
+      canvas.onpointerup = function () {
+        if (draft.current.length) draft.strokes.push(draft.current);
+        draft.current = [];
+        draw();
+        paintMissing();
+      };
+    }
+
+    function onPickPhoto(input) {
+      const file = input.files && input.files[0];
+      if (!file || !state.draft) return;
+      const reader = new FileReader();
+      reader.onload = function () {
+        state.draft.photo = String(reader.result || "");
+        render();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function nextId() {
+      const n = state.tickets.reduce(function (max, t) {
+        return Math.max(max, Number(t.id.split("-")[1]) || 0);
+      }, 0) + 1;
+      return "20261113-" + String(n).padStart(3, "0");
+    }
+
+    function act(name, arg) {
+      state.toast = "";
+      if (name === "theme") {
+        state.theme = state.theme === "dark" ? "light" : "dark";
+        render();
+        return;
+      }
+      if (name === "who") {
+        state.screen = "who";
+        state.ticketId = "";
+        state.draft = null;
+        render();
+        return;
+      }
+      if (name === "role") {
+        state.draft = null;
+        state.ticketId = "";
+        if (arg === "engineer") state.screen = "engineer";
+        if (arg === "vendor") state.screen = "vendor";
+        if (arg === "director") state.screen = "director";
+        if (arg === "boss") state.screen = "boss";
+        render();
+        return;
+      }
+      if (name === "site") {
+        state.site = arg;
+        render();
+        return;
+      }
+      if (name === "boss-site") {
+        state.bossSite = arg;
+        render();
+        return;
+      }
+      if (name === "create") {
+        state.draft = blankDraft();
+        state.screen = "create";
+        render();
+        return;
+      }
+      if (name === "engineer") {
+        state.screen = "engineer";
+        state.draft = null;
+        render();
+        return;
+      }
+      if (name === "trade") {
+        state.draft.trade = arg;
+        render();
+        return;
+      }
+      if (name === "place") {
+        state.draft.place = arg;
+        state.draft.customPlace = "";
+        render();
+        return;
+      }
+      if (name === "demo-photo") {
+        state.draft.photo = BEFORE;
+        render();
+        return;
+      }
+      if (name === "demo-after") {
+        state.draft.photo = AFTER;
+        render();
+        return;
+      }
+      if (name === "send") {
+        const d = state.draft;
+        if (missingCreate(d).length) return;
+        const id = nextId();
+        const due = "2026-11-18";
+        state.tickets.unshift({
+          id: id,
+          site: state.site,
+          trade: d.trade,
+          place: draftPlace(d),
+          desc: d.desc.trim(),
+          due: due,
+          status: "待回傳",
+          before: d.photo,
+          after: "",
+          sigs: { engineer: true, vendor: false, director: false },
+          closedOn: ""
+        });
+        state.ticketId = id;
+        state.draft = null;
+        state.screen = "line";
+        render();
+        return;
+      }
+      if (name === "open-vendor") {
+        state.ticketId = arg;
+        state.draft = blankDraft();
+        state.screen = "vendor-one";
+        render();
+        return;
+      }
+      if (name === "vendor-list") {
+        state.ticketId = "";
+        state.draft = null;
+        state.screen = "vendor";
+        render();
+        return;
+      }
+      if (name === "vendor-send") {
+        const d = state.draft;
+        const t = ticket(state.ticketId);
+        if (!t || !d.photo || !sigReady(d)) return;
+        t.after = d.photo;
+        t.sigs.vendor = true;
+        t.status = "待查驗";
+        state.draft = null;
+        state.screen = "who";
+        state.ticketId = "";
+        render();
+        showToast("已送出。主任可以在第三個門簽名。");
+        return;
+      }
+      if (name === "open-director") {
+        state.ticketId = arg;
+        state.draft = blankDraft();
+        state.screen = "director-one";
+        render();
+        return;
+      }
+      if (name === "director") {
+        state.ticketId = "";
+        state.draft = null;
+        state.screen = "director";
+        render();
+        return;
+      }
+      if (name === "close") {
+        const t = ticket(state.ticketId);
+        if (!t || !sigReady(state.draft)) return;
+        t.sigs.director = true;
+        t.status = "已結案";
+        t.closedOn = TODAY;
+        state.draft = null;
+        state.ticketId = "";
+        state.screen = "director";
+        render();
+        showToast("已結案。回到第一頁，打開「本週和逾期」就看得到。");
+        return;
+      }
+      if (name === "settings") {
+        state.screen = "settings";
+        render();
+        return;
+      }
+      if (name === "add-place") {
+        const input = document.getElementById("new-place");
+        const value = input ? input.value.trim() : "";
+        if (!value) return;
+        if (state.vocabPlaces.indexOf(value) < 0) state.vocabPlaces.push(value);
+        render();
+        showToast("已加上「" + value + "」");
+        return;
+      }
+      if (name === "save-settings") {
+        showToast("已存 " + state.site + " 的設定");
+      }
+    }
+
+    document.getElementById("app").addEventListener("click", function (e) {
+      const el = e.target.closest("[data-act]");
+      if (!el) return;
+      act(el.dataset.act, el.dataset.arg || "");
+    });
+
+    const boot = (location.hash || "").replace("#", "");
+    if (boot === "engineer") state.screen = "engineer";
+    if (boot === "empty") { state.screen = "engineer"; state.site = "第三工地"; }
+    if (boot === "create") { state.screen = "create"; state.draft = blankDraft(); }
+    if (boot === "line") { state.screen = "line"; state.ticketId = "20261113-006"; }
+    if (boot === "vendor") { state.screen = "vendor-one"; state.ticketId = "20261113-006"; state.draft = blankDraft(); }
+    if (boot === "director") { state.screen = "director-one"; state.ticketId = "20261110-004"; state.draft = blankDraft(); }
+    if (boot === "boss") state.screen = "boss";
+    if (boot === "light") { state.theme = "light"; state.screen = "who"; }
+    render();
+  </script>
+</body>
+</html>
