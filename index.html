@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>工地缺失改善追蹤系統 (一頁一卡極簡版)</title>
+  <title>工地缺失改善系統 (Version_Chicharito))</title>
   <meta name="theme-color" content="#0f172a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -46,22 +46,25 @@
         </div>
 
         <div class="flex items-center gap-1 shrink-0">
+          <button type="button" id="site-settings-btn" onclick="openSiteSettings()" class="px-2 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-[11px] font-bold">
+            工地設定
+          </button>
           <button type="button" id="owner-auth-btn" onclick="toggleOwnerAuth()" class="px-2 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-bold shadow">
             工務登入
           </button>
           <button type="button" id="embed-html-btn" onclick="copyFullHtmlForGoogleSites()" title="複製 Google Sites 內嵌程式碼" class="hidden px-2 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 text-[11px] font-bold transition">
-            📋 嵌入碼
+            嵌入碼
           </button>
           <button type="button" id="theme-toggle-btn" onclick="toggleAppTheme()" title="切換深淺色" class="px-2 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition">
-            <span id="theme-toggle-icon">☀️</span>
+            <span id="theme-toggle-icon">淺色</span>
           </button>
         </div>
       </div>
 
       <!-- Row 2: 4 Single-Card Navigation Tabs -->
-      <nav class="grid grid-cols-4 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-center" aria-label="主要功能切換">
+      <nav id="main-tab-nav" class="grid grid-cols-4 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-center" aria-label="主要功能切換">
         <button type="button" id="tab-btn-overview" onclick="switchMainTab('overview')" class="py-1.5 px-1 rounded-lg text-xs font-bold transition-all bg-amber-500 text-slate-950 shadow truncate">
-          🏠 總覽設定
+          總覽
         </button>
         <button type="button" id="tab-btn-pwa" onclick="switchMainTab('pwa')" class="py-1.5 px-1 rounded-lg text-xs font-medium transition-all text-slate-300 hover:text-white truncate">
           📷 1.拍照提報
@@ -84,10 +87,31 @@
   <!-- Strictly ONE Unified Card On Screen At Any Time -->
   <main class="flex-1 max-w-lg w-full mx-auto px-2.5 py-2.5 flex flex-col no-print">
 
+    <section id="view-role" class="hidden flex-1 flex flex-col">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-4 space-y-3 page-card">
+        <div>
+          <div class="text-base font-extrabold text-white">你是誰</div>
+          <p class="text-xs text-slate-400 mt-1 leading-relaxed">先選這次要做的事。從 LINE 點進某一張單的人不會看到這頁，會直接進自己的那一步。</p>
+        </div>
+        <button type="button" onclick="chooseEntryRole('owner')" class="w-full text-left rounded-2xl bg-slate-950 border border-slate-700 px-4 py-3">
+          <b class="block text-base text-white">我是甲方，要開缺失</b>
+          <span class="block mt-1 text-xs text-slate-400">要工務密碼。進來後拍照、寫缺失、發到工班群組。</span>
+        </button>
+        <button type="button" onclick="chooseEntryRole('vendor')" class="w-full text-left rounded-2xl bg-slate-950 border border-slate-700 px-4 py-3">
+          <b class="block text-base text-white">我是工班，來上傳完工</b>
+          <span class="block mt-1 text-xs text-slate-400">不用密碼。只處理要你修的卡。</span>
+        </button>
+        <button type="button" onclick="chooseEntryRole('review')" class="w-full text-left rounded-2xl bg-slate-950 border border-slate-700 px-4 py-3">
+          <b class="block text-base text-white">我是三方，來查驗結案</b>
+          <span class="block mt-1 text-xs text-slate-400">要工務密碼。對施工前和施工後，補第三個簽名。</span>
+        </button>
+      </div>
+    </section>
+
     <!-- ==========================================
-         VIEW 0: 專案總覽・更新專案・查驗人員・SOP 與統計單卡 (Reference Image Match)
+         VIEW 0: 專案總覽・案件、開單與統計
          ========================================== -->
-    <section id="view-overview" class="flex-1 flex flex-col">
+    <section id="view-overview" class="hidden flex-1 flex flex-col">
       <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-4 space-y-4 flex-1 flex flex-col justify-between page-card">
         <div class="space-y-3.5">
 
@@ -110,87 +134,6 @@
                 <p class="text-[10px] text-slate-400 leading-snug">現場核對無誤後，三方簽章勾選結案。</p>
               </button>
             </div>
-          </div>
-
-          <!-- 2. 目前巡檢工區 + 更新專案 + 查驗人員 -->
-          <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="px-2.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold">
-                目前巡檢工區與查驗人員設定
-              </span>
-              <span id="project-saved-badge" class="text-[11px] text-emerald-400 font-semibold">✓ 已同步套用</span>
-            </div>
-
-            <!-- Project Name Row -->
-            <div class="space-y-1">
-              <label for="project-name-input" class="block text-xs text-slate-400">目前巡檢專案 / 工區名稱：</label>
-              <div class="flex items-center gap-2">
-                <input id="project-name-input" type="text" value="A棟新建工程 (宏昇營造)" placeholder="請輸入專案或工區名稱..." class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm font-bold text-white focus:border-amber-500 focus:outline-none" />
-                <button type="button" onclick="updateProjectAndInspector()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-amber-500 text-white hover:text-slate-950 font-bold text-xs border border-slate-700 transition shrink-0 shadow">
-                  更新專案
-                </button>
-              </div>
-            </div>
-
-            <!-- Inspector Name Row -->
-            <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
-              <label for="inspector-name-input" class="text-xs text-slate-300 font-semibold shrink-0">👷 查驗人員：</label>
-              <input id="inspector-name-input" type="text" value="陳工程師" placeholder="請輸入查驗工程師姓名..." onchange="updateProjectAndInspector()" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-emerald-300 focus:border-emerald-500 focus:outline-none" />
-              <button type="button" onclick="updateProjectAndInspector()" class="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 text-xs font-bold transition shrink-0">
-                儲存人員
-              </button>
-            </div>
-            <div class="pt-2 border-t border-slate-800/80 space-y-1">
-              <label for="owner-pin-input" class="block text-[11px] text-slate-400">工務密碼（只給甲方。沒登入的人只能用廠商回傳）</label>
-              <div class="flex items-center gap-2">
-                <input id="owner-pin-input" type="password" value="2468" autocomplete="off" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" />
-                <button type="button" onclick="saveOwnerPin()" class="px-2.5 py-1.5 rounded-xl bg-amber-500 text-slate-950 text-xs font-bold">更新密碼</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-3">
-            <div class="space-y-0.5">
-              <span class="px-2.5 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30 text-[11px] font-bold">本工地常用選項（管理員可改）</span>
-              <p class="text-[11px] text-slate-400 pt-1">現場拍照時仍可直接打字。這裡只編輯下拉建議，不要寫死 A棟／1F／10F。</p>
-            </div>
-            <div class="grid grid-cols-1 gap-2.5">
-              <div>
-                <div class="text-[11px] text-slate-300 font-semibold mb-1">棟別</div>
-                <div id="vocab-chips-buildings" class="flex flex-wrap gap-1 mb-1.5"></div>
-                <div class="flex gap-1">
-                  <input id="vocab-input-buildings" type="text" placeholder="例如：A棟、北棟、工務所" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter'){event.preventDefault();addVocabFromInput('buildings');}" />
-                  <button type="button" onclick="addVocabFromInput('buildings')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-[11px] font-bold border border-slate-700">新增</button>
-                </div>
-              </div>
-              <div>
-                <div class="text-[11px] text-slate-300 font-semibold mb-1">樓層 / 戶別</div>
-                <div id="vocab-chips-floors" class="flex flex-wrap gap-1 mb-1.5"></div>
-                <div class="flex gap-1">
-                  <input id="vocab-input-floors" type="text" placeholder="例如：B1、3F、3F-A1" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter'){event.preventDefault();addVocabFromInput('floors');}" />
-                  <button type="button" onclick="addVocabFromInput('floors')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-[11px] font-bold border border-slate-700">新增</button>
-                </div>
-              </div>
-              <div>
-                <div class="text-[11px] text-slate-300 font-semibold mb-1">區域位置</div>
-                <div id="vocab-chips-areas" class="flex flex-wrap gap-1 mb-1.5"></div>
-                <div class="flex gap-1">
-                  <input id="vocab-input-areas" type="text" placeholder="例如：大廳、戶外鷹架、電氣室" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter'){event.preventDefault();addVocabFromInput('areas');}" />
-                  <button type="button" onclick="addVocabFromInput('areas')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-[11px] font-bold border border-slate-700">新增</button>
-                </div>
-              </div>
-              <div>
-                <div class="text-[11px] text-slate-300 font-semibold mb-1">工種</div>
-                <div id="vocab-chips-trades" class="flex flex-wrap gap-1 mb-1.5"></div>
-                <div class="flex gap-1">
-                  <input id="vocab-input-trades" type="text" placeholder="例如：帷幕牆、景觀工程" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter'){event.preventDefault();addVocabFromInput('trades');}" />
-                  <button type="button" onclick="addVocabFromInput('trades')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-[11px] font-bold border border-slate-700">新增</button>
-                </div>
-              </div>
-            </div>
-            <button type="button" onclick="harvestVocabFromDefects()" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold border border-slate-700">
-              從既有缺失單帶入曾用過的位置／工種
-            </button>
           </div>
 
           <!-- 目前案件工作檯 -->
@@ -241,6 +184,83 @@
             <div class="text-[10px] text-emerald-300 font-semibold truncate">已結案 (CLOSED)</div>
             <div id="ov-kpi-closed" class="text-xl font-extrabold text-emerald-400 mt-0.5">0</div>
           </button>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-settings" class="hidden flex-1 flex flex-col">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-4 space-y-3 page-card">
+        <div>
+          <div class="text-base font-extrabold text-white">工地設定</div>
+          <p class="text-xs text-slate-400 mt-1">工區、查驗人、密碼和常用詞在這裡改。開工地的人不用先看這些。</p>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="px-2.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold">目前巡檢工區與查驗人員</span>
+            <span id="project-saved-badge" class="text-[11px] text-emerald-400 font-semibold">已同步套用</span>
+          </div>
+          <div class="space-y-1">
+            <label for="project-name-input" class="block text-xs text-slate-400">目前巡檢專案 / 工區名稱：</label>
+            <div class="flex items-center gap-2">
+              <input id="project-name-input" type="text" value="A棟新建工程 (宏昇營造)" placeholder="請輸入專案或工區名稱..." class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm font-bold text-white focus:border-amber-500 focus:outline-none" />
+              <button type="button" onclick="updateProjectAndInspector()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-amber-500 text-white hover:text-slate-950 font-bold text-xs border border-slate-700 transition shrink-0">更新專案</button>
+            </div>
+          </div>
+          <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
+            <label for="inspector-name-input" class="text-xs text-slate-300 font-semibold shrink-0">查驗人員：</label>
+            <input id="inspector-name-input" type="text" value="陳工程師" placeholder="請輸入查驗工程師姓名..." onchange="updateProjectAndInspector()" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-emerald-300 focus:border-emerald-500 focus:outline-none" />
+            <button type="button" onclick="updateProjectAndInspector()" class="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 text-xs font-bold transition shrink-0">儲存人員</button>
+          </div>
+          <div class="pt-2 border-t border-slate-800/80 space-y-1">
+            <label for="owner-pin-input" class="block text-[11px] text-slate-400">工務密碼（只給甲方。沒登入的人只能用廠商回傳）</label>
+            <div class="flex items-center gap-2">
+              <input id="owner-pin-input" type="password" value="2468" autocomplete="off" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" />
+              <button type="button" onclick="saveOwnerPin()" class="px-2.5 py-1.5 rounded-xl bg-amber-500 text-slate-950 text-xs font-bold">更新密碼</button>
+            </div>
+          </div>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-3">
+          <div class="space-y-0.5">
+            <span class="px-2.5 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30 text-[11px] font-bold">本工地常用選項</span>
+            <p class="text-[11px] text-slate-400 pt-1">現場拍照時仍可直接打字。下拉選單只顯示這裡的清單，不會自動把舊缺失單的詞加回來。</p>
+          </div>
+          <div class="grid grid-cols-1 gap-2.5">
+            <div>
+              <div class="text-[11px] text-slate-300 font-semibold mb-1">棟別</div>
+              <div id="vocab-chips-buildings" class="flex flex-wrap gap-1 mb-1.5"></div>
+              <div class="flex gap-1">
+                <input id="vocab-input-buildings" type="text" placeholder="例如：A棟、北棟、工務所" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter'){event.preventDefault();addVocabFromInput('buildings');}" />
+                <button type="button" onclick="addVocabFromInput('buildings')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-[11px] font-bold border border-slate-700">新增</button>
+              </div>
+            </div>
+            <div>
+              <div class="text-[11px] text-slate-300 font-semibold mb-1">樓層 / 戶別</div>
+              <div id="vocab-chips-floors" class="flex flex-wrap gap-1 mb-1.5"></div>
+              <div class="flex gap-1">
+                <input id="vocab-input-floors" type="text" placeholder="例如：B1、3F、3F-A1" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter'){event.preventDefault();addVocabFromInput('floors');}" />
+                <button type="button" onclick="addVocabFromInput('floors')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-[11px] font-bold border border-slate-700">新增</button>
+              </div>
+            </div>
+            <div>
+              <div class="text-[11px] text-slate-300 font-semibold mb-1">區域位置</div>
+              <div id="vocab-chips-areas" class="flex flex-wrap gap-1 mb-1.5"></div>
+              <div class="flex gap-1">
+                <input id="vocab-input-areas" type="text" placeholder="例如：大廳、戶外鷹架、電氣室" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter'){event.preventDefault();addVocabFromInput('areas');}" />
+                <button type="button" onclick="addVocabFromInput('areas')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-[11px] font-bold border border-slate-700">新增</button>
+              </div>
+            </div>
+            <div>
+              <div class="text-[11px] text-slate-300 font-semibold mb-1">工種</div>
+              <div id="vocab-chips-trades" class="flex flex-wrap gap-1 mb-1.5"></div>
+              <div class="flex gap-1">
+                <input id="vocab-input-trades" type="text" placeholder="例如：帷幕牆、景觀工程" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none" onkeydown="if(event.key==='Enter'){event.preventDefault();addVocabFromInput('trades');}" />
+                <button type="button" onclick="addVocabFromInput('trades')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-[11px] font-bold border border-slate-700">新增</button>
+              </div>
+            </div>
+          </div>
+          <button type="button" onclick="harvestVocabFromDefects()" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold border border-slate-700">從既有缺失單帶入曾用過的位置／工種（選擇性）</button>
+          <button type="button" onclick="saveCurrentSiteSettings()" class="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-sm">儲存本工地設定</button>
+          <p class="text-[11px] text-slate-500 leading-snug">一次把工地名稱、查驗人、工務密碼與常用清單寫入雲端。新增或刪除詞彙也會立刻同步。</p>
         </div>
       </div>
     </section>
@@ -336,7 +356,7 @@
                   🔄 重拍
                 </button>
                 <div class="absolute bottom-2 left-2 right-2 pointer-events-none flex items-center justify-between text-[11px] bg-slate-950/85 px-2.5 py-1 rounded-lg text-slate-300 border border-slate-800">
-                  <span id="canvas-guide-hint">👆 點擊畫布拍照，拖曳即可畫紅圈</span>
+                  <span id="canvas-guide-hint">👆 點空白框上傳圖片；要開鏡頭請按「拍照」</span>
                   <span id="canvas-mark-count" class="text-amber-400 font-semibold">已標記 0 處</span>
                 </div>
               </div>
@@ -371,21 +391,30 @@
               </button>
             </div>
 
-            <div class="grid grid-cols-3 gap-2">
+            <div class="space-y-2.5">
               <div>
-                <label for="pwa-building" class="block text-xs text-slate-400 mb-1">棟別</label>
-                <input type="text" id="pwa-building" list="list-building" placeholder="直接輸入或選常用棟別" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none" />
-                <datalist id="list-building"></datalist>
+                <label for="pwa-building" class="block text-xs text-slate-400 mb-1">棟別（可打字，或點下方常用項）</label>
+                <div class="flex gap-1">
+                  <input type="text" id="pwa-building" placeholder="直接輸入棟別" autocomplete="off" class="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none" />
+                  <select id="pwa-select-building" class="pwa-vocab-select" aria-label="選擇常用棟別" title="選擇常用棟別"></select>
+                </div>
+                <div id="pwa-chips-buildings" class="flex flex-wrap gap-1.5 mt-1.5"></div>
               </div>
               <div>
-                <label for="pwa-floor" class="block text-xs text-slate-400 mb-1">樓層 / 戶別</label>
-                <input type="text" id="pwa-floor" list="list-floor" placeholder="直接輸入或選常用樓層／戶別" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none" />
-                <datalist id="list-floor"></datalist>
+                <label for="pwa-floor" class="block text-xs text-slate-400 mb-1">樓層 / 戶別（可打字，或點下方常用項）</label>
+                <div class="flex gap-1">
+                  <input type="text" id="pwa-floor" placeholder="直接輸入樓層／戶別" autocomplete="off" class="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none" />
+                  <select id="pwa-select-floor" class="pwa-vocab-select" aria-label="選擇常用樓層" title="選擇常用樓層"></select>
+                </div>
+                <div id="pwa-chips-floors" class="flex flex-wrap gap-1.5 mt-1.5"></div>
               </div>
               <div>
-                <label for="pwa-area" class="block text-xs text-slate-400 mb-1">區域位置</label>
-                <input type="text" id="pwa-area" list="list-area" placeholder="直接輸入或選常用區域" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none" />
-                <datalist id="list-area"></datalist>
+                <label for="pwa-area" class="block text-xs text-slate-400 mb-1">區域位置（可打字，或點下方常用項）</label>
+                <div class="flex gap-1">
+                  <input type="text" id="pwa-area" placeholder="直接輸入區域" autocomplete="off" class="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:border-amber-500 focus:outline-none" />
+                  <select id="pwa-select-area" class="pwa-vocab-select" aria-label="選擇常用區域" title="選擇常用區域"></select>
+                </div>
+                <div id="pwa-chips-areas" class="flex flex-wrap gap-1.5 mt-1.5"></div>
               </div>
             </div>
 
@@ -457,8 +486,10 @@
             </div>
 
             <div class="grid grid-cols-3 gap-2" id="trade-grid"></div>
-            <input type="text" id="pwa-trade-custom" list="list-trade" placeholder="或自行輸入工種名稱" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none" onchange="selectTrade(this.value.trim())" />
-            <datalist id="list-trade"></datalist>
+            <div class="flex gap-1">
+              <input type="text" id="pwa-trade-custom" placeholder="或自行輸入工種名稱" autocomplete="off" class="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none" onchange="selectTrade(this.value.trim())" />
+              <select id="pwa-select-trade" class="pwa-vocab-select" aria-label="選擇常用工種" title="選擇常用工種"></select>
+            </div>
 
             <div class="space-y-3 pt-1">
               <div>
@@ -475,6 +506,22 @@
               </div>
             </div>
           </div>
+
+            <div class="rounded-2xl bg-slate-950 border border-amber-500/40 p-2.5 space-y-2">
+              <div class="flex flex-wrap items-center justify-between gap-1">
+                <div class="text-[11px] font-extrabold text-amber-200">查驗工程師必須完成電子簽章後才能派單（點方格即可）</div>
+                <div class="flex items-center gap-1">
+                  <button type="button" onclick="openRequiredSignaturePad('inspector')" class="px-2.5 py-1 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[11px] font-extrabold transition">
+                    ✨ 電子簽章
+                  </button>
+                  <button type="button" onclick="openSignaturePadModal('inspector', currentCaseId)" class="px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 text-[11px] font-bold transition">
+                    選用手寫
+                  </button>
+                </div>
+              </div>
+              <div id="pwa-dispatch-sig-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-2"></div>
+              <p id="pwa-sig-gate-hint" class="hidden text-[11px] text-center text-rose-300 font-bold">請先完成電子簽章，簽完才能派單</p>
+            </div>
 
           <div class="space-y-2 pt-2">
             <button type="button" id="pwa-submit-btn" onclick="submitPwaDefect()" class="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 transition">
@@ -553,19 +600,20 @@
                 <span id="line-card-url">🔗 #/vendor/new</span>
               </div>
 
-              <!-- CIRCLED PART 2: 三方簽章覆核 (點選任一方格即可開啟「手寫簽名板」進行電子簽名) -->
+              <!-- CIRCLED PART 2: 三方簽章覆核（點方格即可電子簽章；手寫選用） -->
               <div class="rounded-2xl bg-[#f1f5f9] border border-slate-300 p-3 space-y-2.5">
                 <div class="flex flex-wrap items-center justify-between gap-1.5">
                   <div class="text-[11px] sm:text-xs font-extrabold text-slate-700">
-                    三方簽章覆核 (點選任一方格即可開啟「手寫簽名板」進行電子簽名)
+                    三方簽章覆核（點方格即可電子簽章）
                   </div>
-                  <button type="button" onclick="openSignaturePadModal('inspector', null)" class="px-2.5 py-1 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[11px] font-extrabold transition shadow-sm">
-                    ✍️ 點擊方格立即手寫簽核
+                  <button type="button" onclick="openRequiredSignaturePad('inspector')" class="px-2.5 py-1 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-[11px] font-extrabold transition shadow-sm">
+                    ✨ 點擊方格立即電子簽章
                   </button>
                 </div>
 
                 <!-- 3 Clickable Electronic Signature Boxes -->
                 <div id="step4-tri-signature-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-2"></div>
+                <p id="step4-sig-gate-hint" class="hidden text-[11px] text-center text-rose-600 font-bold">請先完成電子簽章，簽完才能派單</p>
 
                 <!-- Bottom System Auto-Layout Footer -->
                 <div class="pt-1 border-t border-slate-200/90 flex flex-wrap items-center justify-between gap-1 text-[10px] sm:text-[11px] text-slate-500 font-medium">
@@ -735,6 +783,22 @@
                 </button>
               </div>
               <input id="vendor-reply-note" type="text" value="已依規定修補改善完成，請工務複驗。" placeholder="請輸入完工回報說明..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none" />
+            </div>
+
+            <div class="rounded-2xl bg-slate-950 border border-emerald-500/40 p-2.5 space-y-2">
+              <div class="flex flex-wrap items-center justify-between gap-1">
+                <div class="text-[11px] font-extrabold text-emerald-200">協力廠商必須完成電子簽章後才能發布完工（點方格即可）</div>
+                <div class="flex items-center gap-1">
+                  <button type="button" onclick="openRequiredSignaturePad('vendor')" class="px-2.5 py-1 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 text-[11px] font-extrabold transition">
+                    ✨ 廠商電子簽章
+                  </button>
+                  <button type="button" onclick="openSignaturePadModal('vendor', currentVendorTicketId)" class="px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 text-[11px] font-bold transition">
+                    選用手寫
+                  </button>
+                </div>
+              </div>
+              <div id="vendor-complete-sig-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-2"></div>
+              <p id="vendor-sig-gate-hint" class="hidden text-[11px] text-center text-rose-300 font-bold">請先完成電子簽章，簽完才能發布完工</p>
             </div>
           </div>
 
@@ -1127,8 +1191,8 @@
         <!-- Tri-party Electronic Signature Block in PDF -->
         <div class="rounded-2xl bg-[#f1f5f9] border border-slate-300 p-3 space-y-2">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-extrabold text-slate-700">三方簽章覆核 (點選任一方格即可開啟「手寫簽名板」進行電子簽名)</span>
-            <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold">✍️ 點擊方格立即手寫簽核</span>
+            <span class="text-xs font-extrabold text-slate-700">三方簽章覆核（點方格即可電子簽章）</span>
+            <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold">✨ 電子簽章即可</span>
           </div>
           <div id="pdf-tri-signature-grid" class="grid grid-cols-3 gap-2"></div>
           <div class="pt-1 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-500">
@@ -1258,14 +1322,14 @@
   </div>
 
   <!-- ==========================================
-       MODAL 6: 手寫簽名板 (三方簽章覆核・電子簽名與方章)
-       ========================================== -->
+       MODAL 6: 電子簽章板 (三方簽章覆核・名章與選用手寫)
+  ========================================== -->
   <div id="signature-pad-modal" class="fixed inset-0 z-50 hidden bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-3 no-print">
     <div class="bg-slate-900 border border-amber-500/60 rounded-2xl max-w-md w-full overflow-hidden shadow-2xl flex flex-col">
       <div class="px-4 py-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <span class="text-base">✍️</span>
-          <h3 id="sig-modal-title" class="text-sm font-bold text-white">手寫簽名板 — 三方簽章覆核</h3>
+          <span class="text-base">✨</span>
+          <h3 id="sig-modal-title" class="text-sm font-bold text-white">電子簽章 — 三方簽章覆核</h3>
         </div>
         <button type="button" onclick="closeSignaturePadModal()" class="text-slate-400 hover:text-white text-xs px-2 py-1 rounded-lg hover:bg-slate-800">
           ✕ 關閉
@@ -1298,7 +1362,7 @@
         <!-- Interactive Handwriting Canvas -->
         <div class="space-y-1">
           <div class="flex items-center justify-between text-[11px] text-slate-400">
-            <span>👇 請在下方白色簽名欄內用手指或滑鼠手寫簽名：</span>
+            <span>👇 電子簽章即可（已預填名章）；手寫為選用：</span>
             <button type="button" onclick="clearSignaturePadCanvas()" class="text-rose-400 hover:underline font-bold">🗑️ 清除重簽</button>
           </div>
           <div class="rounded-xl overflow-hidden border-2 border-slate-600 bg-[#f8fafc] shadow-inner relative">
@@ -1354,7 +1418,7 @@
   <!-- Toast Container -->
   <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-xs w-full pointer-events-none px-3 no-print"></div>
 
-  <script>window.SITEQC_BUILD = '1111-VOID';</script>
-  <script src="./js/app.js?v=1111-VOID"></script>
+  <script>window.SITEQC_BUILD = '1113-ROLE';</script>
+  <script src="./js/app.js?v=1113-ROLE"></script>
 </body>
 </html>
